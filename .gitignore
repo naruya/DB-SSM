@@ -1,6 +1,8 @@
 data/
 logzero/
 output/
+weights/
+src/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

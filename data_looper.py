@@ -66,26 +66,26 @@ class MyDataLooper(object):
         model.train()
 
         model.g_optimizer.zero_grad()
-        if model.gan:
-            model.d_optimizer.zero_grad()
+        # if model.gan:
+        #     model.d_optimizer.zero_grad()
 
         g_loss, d_loss, return_dict = model.forward(x_0, x, a, True)
         g_loss = g_loss / self.iters_to_accumulate
         g_loss.backward()
-        if model.gan:
-            d_loss = d_loss / self.iters_to_accumulate
-            d_loss.backward()
+        # if model.gan:
+        #     d_loss = d_loss / self.iters_to_accumulate
+        #     d_loss.backward()
 
         if (self.i + 1) % self.iters_to_accumulate == 0:
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 model.distributions.parameters(), 1e+6)
             return_dict.update({"g_grad_norm": grad_norm.item()})
             model.g_optimizer.step()
-            if model.gan:
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    model.discriminator.parameters(), 1e+3)
-                return_dict.update({"d_grad_norm": grad_norm.item()})
-                model.d_optimizer.step()
+            # if model.gan:
+            #     grad_norm = torch.nn.utils.clip_grad_norm_(
+            #         model.discriminator.parameters(), 1e+3)
+            #     return_dict.update({"d_grad_norm": grad_norm.item()})
+            #     model.d_optimizer.step()
 
             logger.info("({}) Iter: {}/{} {}".format(
                 self.mode, self.i+1, len(self.loader), return_dict))

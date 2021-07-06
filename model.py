@@ -15,7 +15,6 @@ class SSM(nn.Module):
         self.s_dim = s_dim = args.s_dim
         self.a_dim = a_dim = args.a_dim
         self.h_dim = h_dim = args.h_dim
-        self.gan = args.gan
         self.device = args.device
         self.args = args
 
@@ -123,7 +122,10 @@ class SSM(nn.Module):
             x_0 = torch.from_numpy(x_0).to(self.device[0])
             s_t = self.sample_s_0(x_0)
         else:
-            a_t = np.concatenate([[viw], [mot]], 1)
+            if self.args.no_motion:
+                a_t = np.concatenate([[viw]], 1)
+            else:
+                a_t = np.concatenate([[viw], [mot]], 1)
             a_t = torch.from_numpy(a_t).to(self.device[0])
             s_t = self.prior(self.s_t, a_t)[0]
 

@@ -6,7 +6,7 @@ from datetime import datetime
 def get_args(jupyter=False, args=""):
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, nargs="+", default=[0])
-    parser.add_argument("--data_dir", type=str, default="../data/")
+    parser.add_argument("--data_dir", type=str, default="./data/")
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--B", type=int, default=4)
     parser.add_argument("--iters_to_accumulate", type=int, default=16)
@@ -15,7 +15,8 @@ def get_args(jupyter=False, args=""):
     parser.add_argument("--h_dim", type=int, default=1024)
     # view(rpy) 3 + motion(xyzdxdydz*2) 12 == 15
     parser.add_argument("--a_dim", type=int, default=3)
-    parser.add_argument('--gan', action='store_true')
+    # parser.add_argument('--gan', action='store_true')
+    parser.add_argument('--no_motion', action='store_true')
     parser.add_argument('--no_shuffle', action='store_true')
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--timestamp", type=str, default=None)

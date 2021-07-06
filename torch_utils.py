@@ -15,9 +15,9 @@ def save_model(model, epoch):
     for i, dist in enumerate(model.distributions):
         save_dict.update({"g_net{}".format(i): dist.state_dict()})
     save_dict.update({"g_opt": model.g_optimizer.state_dict()})
-    if model.gan:
-        save_dict.update({"d_net": model.discriminator.state_dict()})
-        save_dict.update({"d_opt": model.d_optimizer.state_dict()})
+    # if model.gan:
+    #     save_dict.update({"d_net": model.discriminator.state_dict()})
+    #     save_dict.update({"d_opt": model.d_optimizer.state_dict()})
     torch.save(save_dict, path)
 
 
@@ -34,9 +34,9 @@ def load_model(model, epoch=None, model_dir=None):
     for i, dist in enumerate(model.distributions):
         dist.load_state_dict(checkpoint["g_net{}".format(i)])
     model.g_optimizer.load_state_dict(checkpoint["g_opt"])
-    if model.gan:
-        model.discriminator.load_state_dict(checkpoint["d_net"])
-        model.d_optimizer.load_state_dict(checkpoint["d_opt"])
+    # if model.gan:
+    #     model.discriminator.load_state_dict(checkpoint["d_net"])
+    #     model.d_optimizer.load_state_dict(checkpoint["d_opt"])
 
 
 # https://gist.github.com/jeasinema/ed9236ce743c8efaf30fa2ff732749f5
