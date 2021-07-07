@@ -7,12 +7,12 @@ from data_loader import MyDataLoader
 
 
 class MyDataLooper(object):
-    def __init__(self, model, args, mode):
+    def __init__(self, model, T, args, mode):
         self.mode = mode
         self.device = args.device
         self.iters_to_accumulate = args.iters_to_accumulate
 
-        self.loader = MyDataLoader(mode, args)
+        self.loader = MyDataLoader(mode, T, args)
 
         if hasattr(model, 'module'):
             self.model = model.module
@@ -27,11 +27,14 @@ class MyDataLooper(object):
             x_0 = x_0.to(self.device[0]).float() / 255.
             x = x.to(self.device[0]).float() / 255.
             a = a.to(self.device[0])
+            self.x_0, self.x, self.a = x_0, x, a
 
             if self.mode == "train":
                 return_dict = self._train(x_0, x, a)
-            else:
+            elif self.mode == "test":
                 return_dict = self._test(x_0, x, a)
+            elif self.mode == "valid":
+                continue
 
             if summ is None:
                 keys = return_dict.keys()
@@ -46,19 +49,10 @@ class MyDataLooper(object):
             N += x.size(0)
 
         # write summary
-        for k, v in summ.items():
-            summ[k] = v / N
-        logger.info("({}) Epoch: {} {}".format(self.mode, epoch, summ))
-
-        # evaluation
-        _x, _xq, _xp = self.model.sample_x(x_0[:4], x[:4], a[:4])
-
-        path = "output/{}/epoch{:05}/".format(self.model.args.timestamp, epoch)
-        os.makedirs(path, exist_ok=True)
-        for i in range(4):
-            make_gif(_x[i], path + "{}_true{:02}.gif".format(self.mode, i))
-            make_gif(_xq[i], path + "{}_pred-q{:02}.gif".format(self.mode, i))
-            make_gif(_xp[i], path + "{}_pred-p{:02}.gif".format(self.mode, i))
+        if not self.mode == "valid":
+            for k, v in summ.items():
+                summ[k] = v / N
+            logger.info("({}) Epoch: {} {}".format(self.mode, epoch, summ))
 
 
     def _train(self, x_0, x, a):
@@ -101,3 +95,26 @@ class MyDataLooper(object):
             g_loss, d_loss, return_dict = model.forward(x_0, x, a, False)
 
         return return_dict
+
+
+    def output(self, epoch):
+        x_0, x, a = self.x_0, self.x, self.a
+
+        M = min(4, len(x))
+
+        path = "output/{}/epoch{:05}/".format(self.model.args.timestamp, epoch)
+        os.makedirs(path, exist_ok=True)
+
+        if not self.mode == "valid":
+            _x, _xq, _xp = self.model.sample_x(x_0[:M], x[:M], a[:M])
+        else:
+            _x, _xv = self.model.sample_x(x_0[:M], x[:M], a[:M], valid=True)
+
+        for i in range(M):
+            if not self.mode == "valid":
+                make_gif(_x[i], path + "{}_true{:02}.gif".format(self.mode, i))
+                make_gif(_xq[i], path + "{}_pred-q{:02}.gif".format(self.mode, i))
+                make_gif(_xp[i], path + "{}_pred-p{:02}.gif".format(self.mode, i))
+            else:
+                make_gif(_x[i], path + "{}_true{:02}.gif".format(self.mode, i))
+                make_gif(_xv[i], path + "{}_pred-v{:02}.gif".format(self.mode, i))

@@ -11,6 +11,7 @@ def get_args(jupyter=False, args=""):
     parser.add_argument("--B", type=int, default=4)
     parser.add_argument("--iters_to_accumulate", type=int, default=16)
     parser.add_argument("--T", type=int, default=10)
+    parser.add_argument("--T_val", type=int, default=100)
     parser.add_argument("--s_dim", type=int, default=64)
     parser.add_argument("--h_dim", type=int, default=1024)
     # view(rpy) 3 + motion(xyzdxdydz*2) 12 == 15
@@ -18,6 +19,8 @@ def get_args(jupyter=False, args=""):
     # parser.add_argument('--gan', action='store_true')
     parser.add_argument('--no_motion', action='store_true')
     parser.add_argument('--no_shuffle', action='store_true')
+    parser.add_argument("--freq_output", type=int, default=10)
+    parser.add_argument("--freq_save", type=int, default=10)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--timestamp", type=str, default=None)
     parser.add_argument("--load_epoch", type=int, default=None)

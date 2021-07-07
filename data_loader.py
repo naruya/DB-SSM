@@ -9,14 +9,16 @@ from skvideo.io import vread
 class MyDataset(Dataset):
     def __init__(self, data_dir, mode, T):
         self.T = T
-        vid_paths = sorted(glob(os.path.join(data_dir, mode, "video_mini", "*")))
-        viw_paths = sorted(glob(os.path.join(data_dir, mode, "view", "*")))
+
+        _mode = "train" if mode == "train" else "test"
+        vid_paths = sorted(glob(os.path.join(data_dir, _mode, "video", "*")))
+        viw_paths = sorted(glob(os.path.join(data_dir, _mode, "view", "*")))
         # mot_paths = sorted(glob(os.path.join(data_dir, mode, "motion", "*")))
 
         self.vid = np.concatenate([vread(path) for path in vid_paths]).astype(np.float32)
         self.viw = np.concatenate([np.load(path) for path in viw_paths]).astype(np.float32)[:, 3:] # xyzrpy
         # self.mot = np.concatenate([np.load(path) for path in mot_paths]).astype(np.float32)
-        print(self.vid.shape, self.viw.shape)
+        print(mode, self.vid.shape, self.viw.shape)
 
         if mode == "train":
             self.viw_mean = self.viw.mean(axis=0)
@@ -50,9 +52,9 @@ class MyDataset(Dataset):
 
 
 class MyDataLoader(DataLoader):
-    def __init__(self, mode, args):
+    def __init__(self, mode, T, args):
 
-        dataset = MyDataset(args.data_dir, mode, args.T)
+        dataset = MyDataset(args.data_dir, mode, T)
 
         super(MyDataLoader, self).__init__(dataset,
                                            batch_size=args.B,

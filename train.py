@@ -18,8 +18,9 @@ if __name__ == "__main__":
     logzero.logger.info("args: " + str(args))
 
     model = SSM(args)
-    train_looper = MyDataLooper(model, args, "train")
-    test_looper = MyDataLooper(model, args, "test")
+    train_looper = MyDataLooper(model, args.T, args, "train")
+    test_looper = MyDataLooper(model, args.T, args, "test")
+    valid_looper = MyDataLooper(model, args.T_val, args, "valid")
 
     if args.load_epoch:
         resume_epoch = args.load_epoch + 1
@@ -30,7 +31,13 @@ if __name__ == "__main__":
     for epoch in range(resume_epoch, args.epochs + 1):
         train_looper(epoch)
         test_looper(epoch)
+        valid_looper(epoch)
 
-        if epoch % 10 == 0:
+        if epoch % args.freq_output == 0:
+            train_looper.output(epoch)
+            test_looper.output(epoch)
+            valid_looper.output(epoch)
+
+        if epoch % args.freq_save == 0:
             save_model(model, epoch)
             load_model(model, epoch)

@@ -45,18 +45,17 @@ class SSM(nn.Module):
         _B, _T = x.size(0), x.size(1)
         x = x.transpose(0, 1)  # T,B,3,64,64
         a = a.transpose(0, 1)  # T,B,1
+        sq_prev = self.sample_s_0(x_0)
 
-        _xq, _xp = [], []
         s_loss, x_loss, s_aux_loss = 0, 0, 0
 
-        s_prev = self.sample_s_0(x_0)
-
+        _xq, _xp = [], []
         for t in range(_T):
             x_t, a_t = x[t], a[t]
             h_t = self.encoder(x_t)
 
-            q = Normal(*self.posterior(s_prev, a_t, h_t))
-            p = Normal(*self.prior(s_prev, a_t))
+            q = Normal(*self.posterior(sq_prev, a_t, h_t))
+            p = Normal(*self.prior(sq_prev, a_t))
             sq_t = q.rsample()
             xq_t = self.decoder(sq_t)
 
@@ -69,7 +68,7 @@ class SSM(nn.Module):
             s_aux_loss += kl_divergence(
                 q, self.prior01).mean()
 
-            s_prev = sq_t
+            sq_prev = sq_t
 
             if return_x:
                 sp_t = p.rsample()
@@ -78,7 +77,7 @@ class SSM(nn.Module):
                 _xq.append(xq_t)
 
         if return_x:
-            return x, torch.stack(_xq), torch.stack(_xp)
+            return torch.stack(_xq), torch.stack(_xp)
 
         g_loss, d_loss = 0., 0.
         g_loss += s_loss + x_loss
@@ -92,6 +91,23 @@ class SSM(nn.Module):
         return g_loss, d_loss, return_dict
 
 
+    def forward_valid(self, x_0, a):
+        _B, _T = a.size(0), a.size(1)
+        a = a.transpose(0, 1)  # T,B,1
+        sp_prev = self.sample_s_0(x_0)
+
+        _xv = []
+        for t in range(_T):
+            a_t = a[t]
+            p = Normal(*self.prior(sp_prev, a_t))
+            sp_t = p.rsample()
+            xp_t = self.decoder(sp_t)
+            sp_prev = sp_t
+            _xv.append(xp_t)
+
+        return torch.stack(_xv),
+
+
     def sample_s_0(self, x_0):
         device = x_0.device
 
@@ -103,14 +119,22 @@ class SSM(nn.Module):
         return s_t
 
 
-    def sample_x(self, x_0, x, a):
+    def sample_x(self, x_0, x, a, valid=False):
         with torch.no_grad():
-            x_list = []
-            for _x in self.forward(x_0, x, a, False, return_x=True):
+            x_list = []  # numpy
+            _x_list = [x.transpose(0, 1)]  # torch
+
+            if not valid:
+                _x_list += self.forward(x_0, x, a, False, return_x=True)
+            else:
+                _x_list += self.forward_valid(x_0, a)
+
+            for _x in _x_list:
                 _x = torch.clamp(_x, 0, 1)
                 _x = _x.transpose(0, 1).detach().cpu().numpy()  # BxT
                 _x = (np.transpose(_x, [0,1,3,4,2]) * 255).astype(np.uint8)
                 x_list.append(_x)
+
         return x_list
 
 
