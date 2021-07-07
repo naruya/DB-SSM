@@ -23,16 +23,16 @@ class MyDataLooper(object):
     def __call__(self, epoch):
         self.i, N, summ = 0, 0, None
 
-        for x_0, x, a in self.loader:
+        for x_0, x, v in self.loader:
             x_0 = x_0.to(self.device[0]).float() / 255.
             x = x.to(self.device[0]).float() / 255.
-            a = a.to(self.device[0])
-            self.x_0, self.x, self.a = x_0, x, a
+            v = v.to(self.device[0])
+            self.x_0, self.x, self.v = x_0, x, v
 
             if self.mode == "train":
-                return_dict = self._train(x_0, x, a)
+                return_dict = self._train(x_0, x, v)
             elif self.mode == "test":
-                return_dict = self._test(x_0, x, a)
+                return_dict = self._test(x_0, x, v)
             elif self.mode == "valid":
                 continue
 
@@ -55,7 +55,7 @@ class MyDataLooper(object):
             logger.info("({}) Epoch: {} {}".format(self.mode, epoch, summ))
 
 
-    def _train(self, x_0, x, a):
+    def _train(self, x_0, x, v):
         model = self.model
         model.train()
 
@@ -63,7 +63,7 @@ class MyDataLooper(object):
         # if model.gan:
         #     model.d_optimizer.zero_grad()
 
-        g_loss, d_loss, return_dict = model.forward(x_0, x, a, True)
+        g_loss, d_loss, return_dict = model.forward(x_0, x, v, True)
         g_loss = g_loss / self.iters_to_accumulate
         g_loss.backward()
         # if model.gan:
@@ -87,18 +87,18 @@ class MyDataLooper(object):
         return return_dict
 
 
-    def _test(self, x_0, x, a):
+    def _test(self, x_0, x, v):
         model = self.model
         model.eval()
 
         with torch.no_grad():
-            g_loss, d_loss, return_dict = model.forward(x_0, x, a, False)
+            g_loss, d_loss, return_dict = model.forward(x_0, x, v, False)
 
         return return_dict
 
 
     def output(self, epoch):
-        x_0, x, a = self.x_0, self.x, self.a
+        x_0, x, v = self.x_0, self.x, self.v
 
         M = min(4, len(x))
 
@@ -106,9 +106,9 @@ class MyDataLooper(object):
         os.makedirs(path, exist_ok=True)
 
         if not self.mode == "valid":
-            _x, _xq, _xp = self.model.sample_x(x_0[:M], x[:M], a[:M])
+            _x, _xq, _xp = self.model.sample_x(x_0[:M], x[:M], v[:M])
         else:
-            _x, _xv = self.model.sample_x(x_0[:M], x[:M], a[:M], valid=True)
+            _x, _xv = self.model.sample_x(x_0[:M], x[:M], v[:M], valid=True)
 
         for i in range(M):
             if not self.mode == "valid":

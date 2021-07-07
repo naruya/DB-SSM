@@ -7,55 +7,44 @@ from torch_utils import ResnetBlock, actvn
 
 
 class Prior(nn.Module):
-    def __init__(self, s_dim, a_dim):
+    def __init__(self, s_dim, v_dim, a_dim):
         super(Prior, self).__init__()
 
-        self.fc_loc11 = nn.Linear(s_dim + a_dim, s_dim*2)
-        self.fc_loc12 = nn.Linear(s_dim*2, s_dim)
+        self.fc_loc11 = nn.Linear(s_dim + v_dim + a_dim, s_dim*2)
+        self.fc_loc12 = nn.Linear(s_dim*2 + v_dim, s_dim)
 
-        self.fc_loc21 = nn.Linear(s_dim + s_dim*2, s_dim*2)
-        self.fc_loc22 = nn.Linear(s_dim*2, s_dim)
-
-        self.fc_scale11 = nn.Linear(s_dim*4, s_dim*2)
+        self.fc_scale11 = nn.Linear(s_dim*2, s_dim*2)
         self.fc_scale12 = nn.Linear(s_dim*2, s_dim)
 
-    def forward_shared(self, s_prev, a):
-        h = torch.cat([s_prev, a], 1)
-        h1 = F.relu(self.fc_loc11(h))
-        s1 = self.fc_loc12(h1)
-
-        h = torch.cat([s1, h1], 1)
-        h2 = F.relu(self.fc_loc21(h))
-        s2 = s1 + self.fc_loc22(h2)
-
-        loc = s2
-
-        h = torch.cat([h1, h2], 1)
+    def forward_shared(self, s_prev, v):
+        h = torch.cat([s_prev, v], 1)
+        h = F.relu(self.fc_loc11(h))
+        loc = self.fc_loc12(torch.cat([h, v], 1))
         scale = self.fc_scale12(F.relu(self.fc_scale11(h)))
 
         return loc, scale
 
-    def forward(self, s_prev, a):
-        loc, scale = self.forward_shared(s_prev, a)
+    def forward(self, s_prev, v):
+        loc, scale = self.forward_shared(s_prev, v)
         # TODO: loc = F.tanh(loc)?
         return loc, F.softplus(scale)
 
 
 class Posterior(nn.Module):
-    def __init__(self, prior, s_dim, a_dim, h_dim):
+    def __init__(self, prior, s_dim, h_dim):
         super(Posterior, self).__init__()
         self.prior = prior
         self.fc1 = nn.Linear(s_dim*2 + h_dim, s_dim*2)
         self.fc21 = nn.Linear(s_dim*2, s_dim)
         self.fc22 = nn.Linear(s_dim*2, s_dim)
 
-    def forward(self, s_prev, a, h):
+    def forward(self, s_prev, v, h):
         if hasattr(self.prior, 'module'):
             prior = self.prior.module
         else:
             prior = self.prior
 
-        loc, scale = prior.forward_shared(s_prev, a)
+        loc, scale = prior.forward_shared(s_prev, v)
         h = torch.cat([loc, scale, h], 1)
         h = F.relu(self.fc1(h))
         # TODO: loc = F.tanh(loc)?

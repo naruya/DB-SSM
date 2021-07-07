@@ -44,11 +44,9 @@ class MyDataset(Dataset):
         x = self.vid[t:t+self.T+1]
         x = np.transpose(x, [0,3,1,2])
         x_0, x = x[0], x[1:]
-        _viw = self.viw[t+1:t+self.T+1]
-        # _mot = self.mot[t+1:t+self.T+1]
-        # a = np.concatenate([_viw, _mot], 1)
-        a = np.concatenate([_viw,], 1)
-        return x_0, x, a
+        v = self.viw[t+1:t+self.T+1]
+        # a = self.mot[t+1:t+self.T+1]
+        return x_0, x, v
 
 
 class MyDataLoader(DataLoader):
