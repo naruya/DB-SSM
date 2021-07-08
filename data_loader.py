@@ -24,6 +24,7 @@ class MyDataset(Dataset):
             self.viw_mean = self.viw.mean(axis=0)
             self.viw_std = self.viw.std(axis=0)
             self.viw = ((self.viw - self.viw_mean) / self.viw_std)
+            os.makedirs(os.path.join(data_dir, "param"), exist_ok=True)
             np.save(os.path.join(data_dir, "param", "viw_mean.npy"), self.viw_mean)
             np.save(os.path.join(data_dir, "param", "viw_std.npy"), self.viw_std)
             print(self.viw.mean(), self.viw.std())  # check
