@@ -18,7 +18,12 @@ class MyDataset(Dataset):
         self.vid = np.concatenate([vread(path) for path in vid_paths]).astype(np.float32)
         self.viw = np.concatenate([np.load(path) for path in viw_paths]).astype(np.float32)[:, 3:] # xyzrpy
         # self.mot = np.concatenate([np.load(path) for path in mot_paths]).astype(np.float32)
-        print(mode, self.vid.shape, self.viw.shape)
+
+        # bug of moviepy?
+        if np.sum(self.vid[-2] - self.vid[-1]) == 0:
+            self.vid = self.vid[:-1]
+
+        print(mode, self.vid.shape, self.vid.shape)
 
         if mode == "train":
             self.viw_mean = self.viw.mean(axis=0)
