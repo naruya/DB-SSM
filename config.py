@@ -34,7 +34,7 @@ def get_args(jupyter=False, args=""):
         "git rev-parse --short HEAD".split()).strip().decode('utf-8')
 
     if args.timestamp is None:
-        args.timestamp = datetime.now().strftime("%b%d_%H-%M-%S")
+        args.timestamp = datetime.now().strftime("%b%d_%H%M%S")
 
     args.shuffle = not args.no_shuffle
 
