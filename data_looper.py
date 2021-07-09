@@ -30,9 +30,9 @@ class MyDataLooper(object):
             self.x_0, self.x, self.v = x_0, x, v
 
             if self.mode == "train":
-                return_dict = self._train(x_0, x, v)
+                return_dict = self._train(x_0, x, v, epoch)
             elif self.mode == "test":
-                return_dict = self._test(x_0, x, v)
+                return_dict = self._test(x_0, x, v, epoch)
             elif self.mode == "valid":
                 continue
 
@@ -55,7 +55,7 @@ class MyDataLooper(object):
             logger.info("({}) Epoch: {} {}".format(self.mode, epoch, summ))
 
 
-    def _train(self, x_0, x, v):
+    def _train(self, x_0, x, v, epoch):
         model = self.model
         model.train()
 
@@ -71,8 +71,9 @@ class MyDataLooper(object):
         #     d_loss.backward()
 
         if (self.i + 1) % self.iters_to_accumulate == 0:
+            max_norm = 1.2e+5 if epoch > 10 else 1e+6
             grad_norm = torch.nn.utils.clip_grad_norm_(
-                model.distributions.parameters(), 1e+6)
+                model.distributions.parameters(), max_norm)
             return_dict.update({"g_grad_norm": grad_norm.item()})
             model.g_optimizer.step()
             # if model.gan:
@@ -87,7 +88,7 @@ class MyDataLooper(object):
         return return_dict
 
 
-    def _test(self, x_0, x, v):
+    def _test(self, x_0, x, v, epoch):
         model = self.model
         model.eval()
 
