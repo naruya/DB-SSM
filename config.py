@@ -18,24 +18,28 @@ def get_args(jupyter=False, args=""):
     parser.add_argument("--h_dim", type=int, default=1024)
     # parser.add_argument('--gan', action='store_true')
     parser.add_argument('--no_motion', action='store_true')
-    parser.add_argument('--no_shuffle', action='store_true')
-    parser.add_argument("--freq_output", type=int, default=10)
+    parser.add_argument('--shuffle', action='store_false')
+    parser.add_argument("--freq_write", type=int, default=10)
     parser.add_argument("--freq_save", type=int, default=10)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--timestamp", type=str, default=None)
-    parser.add_argument("--load_epoch", type=int, default=None)
+    parser.add_argument("--resume_epoch", type=int, default=0)
+    parser.add_argument("--timestamp", type=str, default=_timestamp())
+    parser.add_argument("--ghash", type=str, default=_ghash())
 
     if not jupyter:
         args = parser.parse_args()
     else:
         args = parser.parse_args(args.split())
 
-    args.ghash = subprocess.check_output(
-        "git rev-parse --short HEAD".split()).strip().decode('utf-8')
-
-    if args.timestamp is None:
-        args.timestamp = datetime.now().strftime("%b%d_%H%M%S")
-
-    args.shuffle = not args.no_shuffle
-
     return args
+
+
+def _timestamp():
+    timestamp = datetime.now().strftime("%b%d_%H%M%S")
+    return timestamp
+
+
+def _ghash():
+    ghash = subprocess.check_output(
+        "git rev-parse --short HEAD".split()).strip().decode('utf-8')
+    return ghash

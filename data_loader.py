@@ -7,17 +7,26 @@ from skvideo.io import vread
 
 
 class MyDataset(Dataset):
-    def __init__(self, data_dir, mode, T):
+    def __init__(self, data_dir, mode, T, dataset=None):
         self.T = T
+
+        if dataset:
+            self.vid = dataset.vid
+            self.viw = dataset.viw
+            # self.mot = dataset.mot
+            return
 
         _mode = "train" if mode == "train" else "test"
         vid_paths = sorted(glob(os.path.join(data_dir, _mode, "video", "*")))
         viw_paths = sorted(glob(os.path.join(data_dir, _mode, "view", "*")))
         # mot_paths = sorted(glob(os.path.join(data_dir, mode, "motion", "*")))
 
-        self.vid = np.concatenate([vread(path) for path in vid_paths]).astype(np.float32)
-        self.viw = np.concatenate([np.load(path) for path in viw_paths]).astype(np.float32)[:, 3:] # xyzrpy
-        # self.mot = np.concatenate([np.load(path) for path in mot_paths]).astype(np.float32)
+        self.vid = np.concatenate(
+            [vread(path) for path in vid_paths]).astype(np.uint8)
+        self.viw = np.concatenate(
+            [np.load(path) for path in viw_paths]).astype(np.float32)[:, 3:] # xyzrpy
+        # self.mot = np.concatenate(
+        #     [np.load(path) for path in mot_paths]).astype(np.float32)
 
         # bug of moviepy?
         if np.sum(self.vid[-2] - self.vid[-1]) == 0:
@@ -56,9 +65,12 @@ class MyDataset(Dataset):
 
 
 class MyDataLoader(DataLoader):
-    def __init__(self, mode, T, args):
+    def __init__(self, mode, args, dataset=None):
 
-        dataset = MyDataset(args.data_dir, mode, T)
+        if not dataset:
+            dataset = MyDataset(args.data_dir, mode, args.T)
+        else:  # validation on "mode" dataset
+            dataset = MyDataset(args.data_dir, mode, args.T_val, dataset=dataset)
 
         super(MyDataLoader, self).__init__(dataset,
                                            batch_size=args.B,

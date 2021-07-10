@@ -4,7 +4,7 @@ from torch.nn import functional as F
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
 from modules import Prior, Posterior, Encoder, Decoder
-from torch_utils import init_weights
+from torch_utils import init_weights, save_model, load_model
 import numpy as np
 
 
@@ -165,3 +165,11 @@ class SSM(nn.Module):
 
         self.s_t = s_t
         return x_t
+
+
+    def save(self, epoch):
+        save_model(self, epoch)
+
+
+    def load(self, epoch):
+        load_model(self, epoch)
