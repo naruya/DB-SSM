@@ -26,7 +26,7 @@ class Prior(nn.Module):
     def forward(self, s_prev, v):
         loc, scale = self.forward_shared(s_prev, v)
         # TODO: loc = F.tanh(loc)?
-        return loc, F.softplus(scale)
+        return loc, F.softplus(scale) + 1e-5
 
 
 class Posterior(nn.Module):
@@ -47,7 +47,7 @@ class Posterior(nn.Module):
         h = torch.cat([loc, scale, h], 1)
         h = F.relu(self.fc1(h))
         # TODO: loc = F.tanh(loc)?
-        return self.fc21(h), F.softplus(self.fc22(h))
+        return self.fc21(h), F.softplus(self.fc22(h)) + 1e-5
 
 
 class Encoder(nn.Module):
