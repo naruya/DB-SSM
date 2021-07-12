@@ -16,9 +16,8 @@ class MyDataset(Dataset):
             # self.mot = dataset.mot
             return
 
-        _mode = "train" if mode == "train" else "test"
-        vid_paths = sorted(glob(os.path.join(data_dir, _mode, "video", "*")))
-        viw_paths = sorted(glob(os.path.join(data_dir, _mode, "view", "*")))
+        vid_paths = sorted(glob(os.path.join(data_dir, mode, "video", "*")))
+        viw_paths = sorted(glob(os.path.join(data_dir, mode, "view", "*")))
         # mot_paths = sorted(glob(os.path.join(data_dir, mode, "motion", "*")))
 
         self.vid = np.concatenate(
