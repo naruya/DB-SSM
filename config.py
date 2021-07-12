@@ -3,7 +3,7 @@ import subprocess
 from datetime import datetime
 
 
-def get_args(jupyter=False, args=""):
+def get_args(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, nargs="+", default=[0])
     parser.add_argument("--data_dir", type=str, default="./data/")
@@ -26,12 +26,7 @@ def get_args(jupyter=False, args=""):
     parser.add_argument("--resume_epoch", type=int, default=0)
     parser.add_argument("--timestamp", type=str, default=_timestamp())
     parser.add_argument("--ghash", type=str, default=_ghash())
-
-    if not jupyter:
-        args = parser.parse_args()
-    else:
-        args = parser.parse_args(args.split())
-
+    args = parser.parse_args(args)
     return args
 
 
