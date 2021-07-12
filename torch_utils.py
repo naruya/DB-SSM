@@ -21,7 +21,7 @@ def save_model(model, epoch):
     torch.save(save_dict, path)
 
 
-def load_model(model, epoch=None, model_dir=None):
+def load_model(model, epoch, model_dir=None):
     if hasattr(model, 'module'):
         model = model.module
     print("load model")

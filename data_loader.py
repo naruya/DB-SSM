@@ -66,14 +66,15 @@ class MyDataset(Dataset):
 
 class MyDataLoader(DataLoader):
     def __init__(self, mode, args, dataset=None):
-
         if not dataset:
-            dataset = MyDataset(args.data_dir, mode, args.T)
+            B, T = args.B, args.T
         else:  # validation on "mode" dataset
-            dataset = MyDataset(args.data_dir, mode, args.T_val, dataset=dataset)
+            B, T = args.B_val, args.T_val
+
+        dataset = MyDataset(args.data_dir, mode, T, dataset=dataset)
 
         super(MyDataLoader, self).__init__(dataset,
-                                           batch_size=args.B,
+                                           batch_size=B,
                                            shuffle=args.shuffle,
                                            drop_last=True,
                                            num_workers=4,

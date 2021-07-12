@@ -105,12 +105,15 @@ class MyDataLooper(object):
 
 
     def write(self, epoch):
-        path = "output/{}/epoch{:05}/".format(self.model.args.timestamp, epoch)
+        model = self.model
+        model.eval()
+
+        path = "output/{}/epoch{:05}/".format(model.args.timestamp, epoch)
         os.makedirs(path, exist_ok=True)
 
         x_0, x, v = self._toTensor(*iter(self.loader).next())
         M = min(4, len(x))
-        _x, _xq, _xp = self.model.sample_x(x_0[:M], x[:M], v[:M])
+        _x, _xq, _xp = model.sample_x(x_0[:M], x[:M], v[:M])
 
         for i in range(M):
             make_gif(_x[i], path + "{}_true{:02}.gif".format(self.mode, i))
@@ -119,7 +122,7 @@ class MyDataLooper(object):
 
         x_0, x, v = self._toTensor(*iter(self.valid_loader).next())
         M = min(4, len(x))
-        _x, _xv = self.model.sample_x(x_0[:M], x[:M], v[:M], valid=True)
+        _x, _xv = model.sample_x(x_0[:M], x[:M], v[:M], valid=True)
 
         for i in range(M):
             make_gif(_x[i], path + "{}-v_true{:02}.gif".format(self.mode, i))

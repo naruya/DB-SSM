@@ -146,8 +146,8 @@ class SSM(nn.Module):
     @torch.no_grad()
     def step(self, viw=None, mot=None, x_0=None):
         if x_0 is not None:
-            x_0 = np.transpose([x_0], [0,3,1,2]) / 255.
-            x_0 = torch.from_numpy(x_0).to(self.device[0])
+            x_0 = np.transpose([x_0], [0,3,1,2])
+            x_0 = torch.from_numpy(x_0).to(self.device[0]).float() / 255.
             s_t = self.sample_s_0(x_0)
         else:
             v_t = viw[np.newaxis]
@@ -155,7 +155,7 @@ class SSM(nn.Module):
             # if not self.args.no_motion:
             #     a_t = mot[np.newaxis]
             #     a_t = torch.from_numpy(a_t).to(self.device[0])
-            s_t = self.prior(self.s_t, v_t)[0]
+            s_t = self.prior(self.s_t, v_t)[0]  # use mean
 
         x_t = self.decoder(s_t)
         x_t = torch.clamp(x_t, 0, 1)
@@ -171,5 +171,5 @@ class SSM(nn.Module):
         save_model(self, epoch)
 
 
-    def load(self, epoch):
-        load_model(self, epoch)
+    def load(self, epoch, model_dir=None):
+        load_model(self, epoch, model_dir)
