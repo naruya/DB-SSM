@@ -6,8 +6,9 @@ from torch_utils import ResnetBlock, actvn
 
 
 class Prior(nn.Module):
-    def __init__(self, s_dim, v_dim, a_dim):
+    def __init__(self, s_dim, v_dim, a_dim, min_stddev=0.):
         super(Prior, self).__init__()
+        self.min_stddev = min_stddev
 
         self.fc_loc11 = nn.Linear(s_dim + v_dim + a_dim, s_dim*2)
         self.fc_loc12 = nn.Linear(s_dim*2 + v_dim, s_dim)
@@ -26,13 +27,14 @@ class Prior(nn.Module):
     def forward(self, s_prev, v):
         loc, scale = self.forward_shared(s_prev, v)
         # TODO: loc = F.tanh(loc)?
-        return loc, F.softplus(scale)
+        return loc, F.softplus(scale) + self.min_stddev
 
 
 class Posterior(nn.Module):
-    def __init__(self, prior, s_dim, h_dim):
+    def __init__(self, prior, s_dim, h_dim, min_stddev=0.):
         super(Posterior, self).__init__()
         self.prior = prior
+        self.min_stddev = min_stddev
         self.fc1 = nn.Linear(s_dim*2 + h_dim, s_dim*2)
         self.fc21 = nn.Linear(s_dim*2, s_dim)
         self.fc22 = nn.Linear(s_dim*2, s_dim)
@@ -47,7 +49,7 @@ class Posterior(nn.Module):
         h = torch.cat([loc, scale, h], 1)
         h = F.relu(self.fc1(h))
         # TODO: loc = F.tanh(loc)?
-        return self.fc21(h), F.softplus(self.fc22(h))
+        return self.fc21(h), F.softplus(self.fc22(h)) + self.min_stddev
 
 
 class Encoder(nn.Module):

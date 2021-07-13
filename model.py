@@ -20,16 +20,16 @@ class SSM(nn.Module):
         self.args = args
 
         self.prior = torch.nn.DataParallel(
-            Prior(s_dim, v_dim, a_dim).to(self.device[0]),
+            Prior(s_dim, v_dim, a_dim, args.min_stddev).to(self.device[0]),
             self.device)
         self.posterior = torch.nn.DataParallel(
-            Posterior(self.prior, s_dim, h_dim).to(self.device[0]),
+            Posterior(self.prior, s_dim, h_dim, args.min_stddev).to(self.device[0]),
             self.device)
         self.encoder = torch.nn.DataParallel(
-            Encoder().to(self.device[0]),
+            Encoder(args.size).to(self.device[0]),
             self.device)
         self.decoder = torch.nn.DataParallel(
-            Decoder(s_dim).to(self.device[0]),
+            Decoder(s_dim, args.size).to(self.device[0]),
             self.device)
 
         self.distributions = nn.ModuleList([
