@@ -10,6 +10,7 @@ class MyDataLooper(object):
     def __init__(self, model, args, mode):
         self.mode = mode
         self.device = args.device
+        self.max_norm = args.max_norm
         self.iters_to_accumulate = args.iters_to_accumulate
 
         self.loader = MyDataLoader(mode, args)
@@ -73,7 +74,7 @@ class MyDataLooper(object):
         #     d_loss.backward()
 
         if (self.i + 1) % self.iters_to_accumulate == 0:
-            max_norm = 1.2e+5 if epoch > 10 else 1e+6
+            max_norm = self.max_norm if epoch > 50 else 1e+7
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 model.distributions.parameters(), max_norm)
             return_dict.update({"g_grad_norm": grad_norm.item()})
@@ -111,19 +112,23 @@ class MyDataLooper(object):
         path = "output/{}/epoch{:05}/".format(model.args.timestamp, epoch)
         os.makedirs(path, exist_ok=True)
 
-        x_0, x, v = self._toTensor(*iter(self.loader).next())
-        M = min(4, len(x))
-        _x, _xq, _xp = model.sample_x(x_0[:M], x[:M], v[:M])
+        try:
+            x_0, x, v = self._toTensor(*iter(self.loader).next())
+            M = min(4, len(x))
+            _x, _xq, _xp = model.sample_x(x_0[:M], x[:M], v[:M])
 
-        for i in range(M):
-            make_gif(_x[i], path + "{}_true{:02}.gif".format(self.mode, i))
-            make_gif(_xq[i], path + "{}_qsample{:02}.gif".format(self.mode, i))
-            make_gif(_xp[i], path + "{}_psample{:02}.gif".format(self.mode, i))
+            for i in range(M):
+                make_gif(_x[i], path + "{}_true{:02}.gif".format(self.mode, i))
+                make_gif(_xq[i], path + "{}_qsample{:02}.gif".format(self.mode, i))
+                make_gif(_xp[i], path + "{}_psample{:02}.gif".format(self.mode, i))
 
-        x_0, x, v = self._toTensor(*iter(self.valid_loader).next())
-        M = min(4, len(x))
-        _x, _xv = model.sample_x(x_0[:M], x[:M], v[:M], valid=True)
+            x_0, x, v = self._toTensor(*iter(self.valid_loader).next())
+            M = min(4, len(x))
+            _x, _xv = model.sample_x(x_0[:M], x[:M], v[:M], valid=True)
 
-        for i in range(M):
-            make_gif(_x[i], path + "{}-v_true{:02}.gif".format(self.mode, i))
-            make_gif(_xv[i], path + "{}-v_pred{:02}.gif".format(self.mode, i))
+            for i in range(M):
+                make_gif(_x[i], path + "{}-v_true{:02}.gif".format(self.mode, i))
+                make_gif(_xv[i], path + "{}-v_pred{:02}.gif".format(self.mode, i))
+
+        except ValueError as e:
+            logger.warning(e)

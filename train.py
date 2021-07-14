@@ -1,7 +1,7 @@
 import os
 import logzero
 from config import get_args
-from utils import set_seed
+from utils import *
 from model import SSM
 from data_looper import MyDataLooper
 
@@ -25,10 +25,10 @@ if __name__ == "__main__":
         train_looper(epoch)
         test_looper(epoch)
 
-        if epoch % args.freq_write == 0:
-            train_looper.write(epoch)
-            test_looper.write(epoch)
-
         if epoch % args.freq_save == 0:
             model.save(epoch)
             model.load(epoch)
+
+        if epoch % args.freq_write == 0:
+            train_looper.write(epoch)
+            test_looper.write(epoch)

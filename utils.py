@@ -17,3 +17,13 @@ import moviepy.editor as mpy
 def make_gif(frames, filename):
     clip = mpy.ImageSequenceClip(list(frames), fps=30)
     clip.write_gif(filename)
+
+
+# --------------------------------
+
+import subprocess
+
+def check_gpu():
+    cmd = "nvidia-smi"
+    out = subprocess.check_output(cmd.split()).strip().decode('utf-8')
+    print(out)
