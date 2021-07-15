@@ -10,23 +10,17 @@ class Prior(nn.Module):
         super(Prior, self).__init__()
         self.min_stddev = min_stddev
 
-        self.fc_loc11 = nn.Linear(s_dim + v_dim + a_dim, s_dim*2)
-        self.fc_loc12 = nn.Linear(s_dim*2 + v_dim, s_dim)
-
-        self.fc_scale11 = nn.Linear(s_dim*2, s_dim*2)
-        self.fc_scale12 = nn.Linear(s_dim*2, s_dim)
+        self.fc1 = nn.Linear(s_dim + v_dim + a_dim, s_dim*2)
+        self.fc21 = nn.Linear(s_dim*2, s_dim)
+        self.fc22 = nn.Linear(s_dim*2, s_dim)
 
     def forward_shared(self, s_prev, v):
         h = torch.cat([s_prev, v], 1)
-        h = F.relu(self.fc_loc11(h))
-        loc = self.fc_loc12(torch.cat([h, v], 1))
-        scale = self.fc_scale12(F.relu(self.fc_scale11(h)))
-
-        return loc, scale
+        h = F.relu(self.fc1(h))
+        return self.fc21(h), self.fc22(h)
 
     def forward(self, s_prev, v):
         loc, scale = self.forward_shared(s_prev, v)
-        # TODO: loc = F.tanh(loc)?
         return loc, F.softplus(scale) + self.min_stddev
 
 
@@ -35,6 +29,7 @@ class Posterior(nn.Module):
         super(Posterior, self).__init__()
         self.prior = prior
         self.min_stddev = min_stddev
+
         self.fc1 = nn.Linear(s_dim*2 + h_dim, s_dim*2)
         self.fc21 = nn.Linear(s_dim*2, s_dim)
         self.fc22 = nn.Linear(s_dim*2, s_dim)
@@ -48,7 +43,6 @@ class Posterior(nn.Module):
         loc, scale = prior.forward_shared(s_prev, v)
         h = torch.cat([loc, scale, h], 1)
         h = F.relu(self.fc1(h))
-        # TODO: loc = F.tanh(loc)?
         return self.fc21(h), F.softplus(self.fc22(h)) + self.min_stddev
 
 
