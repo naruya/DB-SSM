@@ -70,6 +70,18 @@ def init_weights(model):
         # print("ok", type(m))
 
 
+from torch.distributions import Normal
+
+
+def detach_dist(dist):
+    if dist.__class__.__name__ == "Normal":
+        loc = dist.loc.detach().clone()
+        scale = dist.scale.detach().clone()
+        return Normal(loc, scale)
+    else:
+        raise NotImplementedError
+
+
 # https://github.com/akanimax/Variational_Discriminator_Bottleneck/blob/master/source/vdb/Gan_networks.py
 from torch import nn
 from torch.nn import functional as F

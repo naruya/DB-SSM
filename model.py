@@ -4,7 +4,7 @@ from torch.nn import functional as F
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
 from modules import Prior, Posterior, Encoder, Decoder
-from torch_utils import init_weights, save_model, load_model
+from torch_utils import init_weights, save_model, load_model, detach_dist
 import numpy as np
 
 
@@ -47,11 +47,13 @@ class SSM(nn.Module):
         x = x.transpose(0, 1)  # T,B,3,64,64
         v = v.transpose(0, 1)  # T,B,1
         # a = a.transpose(0, 1)  # T,B,1
+
         sq_prev = self.sample_s_0(x_0)
+        s_0 = sq_prev.detach().clone()
 
-        s_loss, x_loss, s_aux_loss = 0, 0, 0
+        s_loss, x_loss, s_aux_loss, s_over_loss = 0, 0, 0, 0
 
-        _xq, _xp = [], []
+        _xq, _xp, _q = [], [], []
         for t in range(_T):
             x_t, v_t = x[t], v[t]
             h_t = self.encoder(x_t)
@@ -71,6 +73,7 @@ class SSM(nn.Module):
                 q, self.prior01).mean()
 
             sq_prev = sq_t
+            _q.append(detach_dist(q))
 
             if return_x:
                 sp_t = p.rsample()
@@ -84,10 +87,15 @@ class SSM(nn.Module):
         g_loss, d_loss = 0., 0.
         g_loss += s_loss + x_loss
 
+        if self.args.overshoot:
+            s_over_loss = self.overshoot(s_0, v, _q)
+            g_loss += s_over_loss
+
         return_dict = {
             "loss": g_loss.item(),
             "s_loss": s_loss.item(),
             "x_loss": x_loss.item(),
+            "s_over_loss": s_over_loss.item(),
             "s_aux_loss": s_aux_loss.item(),
         }
         return g_loss, d_loss, return_dict
@@ -110,6 +118,35 @@ class SSM(nn.Module):
 
         return torch.stack(_xv),
 
+
+    def overshoot(self, s_0, v, _q):
+        """
+                         (t=0)      (t=1)      (t=2)
+              q_0    ->   q_1   ->   q_2   ->   q_3
+                     \          \          \
+                        p_{1|0} -> p_{2|1} -> p_{3|2}
+                                \          \          \
+                                   p_{2|0} -> p_{3|1}    (i=2)
+                                           \          \
+            |                                 p_{3|0}    (i=1)
+            v                                         \
+          depth                                          (i=0)
+                          v[0]       v[1]       v[2]
+        """
+
+        _T = len(v)
+        s_loss = 0.
+
+        for i in range(_T):
+            sp_prev = s_0 if i==0 else _q[t-1].mean
+            for depth, t in enumerate(range(i, _T)):
+                p = Normal(*self.prior(sp_prev, v[t]))
+                if not depth == 0:
+                    s_loss += torch.sum(
+                        kl_divergence(_q[t], p), dim=[1,]).mean()
+                sp_prev = p.rsample()
+
+        return s_loss
 
     def sample_s_0(self, x_0):
         device = x_0.device
