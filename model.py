@@ -95,9 +95,12 @@ class SSM(nn.Module):
             "loss": g_loss.item(),
             "s_loss": s_loss.item(),
             "x_loss": x_loss.item(),
-            "s_over_loss": s_over_loss.item(),
             "s_aux_loss": s_aux_loss.item(),
         }
+
+        if self.args.overshoot:
+            return_dict.update({"s_over_loss": s_over_loss.item()})
+
         return g_loss, d_loss, return_dict
 
 
