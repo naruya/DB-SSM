@@ -7,9 +7,8 @@ from skvideo.io import vread
 
 
 class MyDataset(Dataset):
-    def __init__(self, data_dir, mode, T, args, dataset=None):
+    def __init__(self, data_dir, mode, T, dataset=None):
         self.T = T
-        self.args = args
 
         if dataset:
             self.vid = dataset.vid
@@ -60,9 +59,6 @@ class MyDataset(Dataset):
         x = np.transpose(x, [0,3,1,2])
         x_0, x = x[0], x[1:]
         v = self.viw[t+1:t+self.T+1]
-        if self.args.dv:
-            v_pred = self.viw[t:t+self.T]
-            v = v - v_pred
         # a = self.mot[t+1:t+self.T+1]
         return x_0, x, v
 
@@ -74,7 +70,7 @@ class MyDataLoader(DataLoader):
         else:  # validation on "mode" dataset
             B, T = args.B_val, args.T_val
 
-        dataset = MyDataset(args.data_dir, mode, T, args, dataset=dataset)
+        dataset = MyDataset(args.data_dir, mode, T, dataset=dataset)
 
         super(MyDataLoader, self).__init__(dataset,
                                            batch_size=B,
