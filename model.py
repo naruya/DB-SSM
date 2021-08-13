@@ -124,24 +124,24 @@ class SSM(nn.Module):
 
     def overshoot(self, s_0, v, _q):
         """
-                         (t=0)      (t=1)      (t=2)
-              q_0    ->   q_1   ->   q_2   ->   q_3
-                     \          \          \
-                        p_{1|0} -> p_{2|1} -> p_{3|2}
-                                \          \          \
-                                   p_{2|0} -> p_{3|1}    (i=2)
-                                           \          \
-            |                                 p_{3|0}    (i=1)
-            v                                         \
-          depth                                          (i=0)
-                          v[0]       v[1]       v[2]
+                              (t=0)          (t=1)          (t=2)
+              q_0 (s_0) -> q_1 (_q[0]) -> q_2 (_q[1]) -> q_3 (_q[2])
+                        \              \              \
+                             p_{1|0}   ->   p_{2|1}   ->   p_{3|2}
+                                       \              \              \
+                                            p_{2|0}   ->   p_{3|1}    (i=2)
+                                                      \              \
+            |                                              p_{3|0}    (i=1)
+            v                                                        \
+          depth                                                       (i=0)
+                              v[0]           v[1]           v[2]
         """
 
         _T = len(v)
         s_loss = 0.
 
         for i in range(_T):
-            sp_prev = s_0 if i==0 else _q[t-1].mean
+            sp_prev = s_0 if i==0 else _q[i-1].mean
             for depth, t in enumerate(range(i, _T)):
                 p = Normal(*self.prior(sp_prev, v[t]))
                 if not depth == 0:
