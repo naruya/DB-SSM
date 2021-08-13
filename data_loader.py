@@ -10,6 +10,7 @@ class MyDataset(Dataset):
     def __init__(self, data_dir, mode, T, dataset=None):
         self.T = T
 
+        # validation with "mode" dataset
         if dataset:
             self.vid = dataset.vid
             self.viw = dataset.viw
@@ -31,7 +32,7 @@ class MyDataset(Dataset):
         if np.sum(self.vid[-2] - self.vid[-1]) == 0:
             self.vid = self.vid[:-1]
 
-        print(mode, self.vid.shape, self.vid.shape)
+        print(mode, self.vid.shape, self.viw.shape)
 
         if mode == "train":
             self.viw_mean = self.viw.mean(axis=0)
@@ -40,12 +41,10 @@ class MyDataset(Dataset):
             os.makedirs(os.path.join(data_dir, "param"), exist_ok=True)
             np.save(os.path.join(data_dir, "param", "viw_mean.npy"), self.viw_mean)
             np.save(os.path.join(data_dir, "param", "viw_std.npy"), self.viw_std)
-            print(self.viw.mean(), self.viw.std())  # check
         else:
             self.viw_mean = np.load(os.path.join(data_dir, "param", "viw_mean.npy"))
             self.viw_std = np.load(os.path.join(data_dir, "param", "viw_std.npy"))
             self.viw = ((self.viw - self.viw_mean) / self.viw_std)
-            print(self.viw.mean(), self.viw.std())  # check
 
         # assert len(self.vid) == len(self.viw) == len(self.mot), \
         assert len(self.vid) == len(self.viw), \
@@ -67,14 +66,14 @@ class MyDataLoader(DataLoader):
     def __init__(self, mode, args, dataset=None):
         if not dataset:
             B, T = args.B, args.T
-        else:  # validation on "mode" dataset
+        else:  # validation with "mode" dataset
             B, T = args.B_val, args.T_val
 
         dataset = MyDataset(args.data_dir, mode, T, dataset=dataset)
 
         super(MyDataLoader, self).__init__(dataset,
                                            batch_size=B,
-                                           shuffle=args.shuffle,
+                                           shuffle=True,
                                            drop_last=True,
                                            num_workers=4,
                                            pin_memory=True)
