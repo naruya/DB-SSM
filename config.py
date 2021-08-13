@@ -24,7 +24,6 @@ def get_args(args=None):
     parser.add_argument('--no_motion', action='store_true')
     parser.add_argument('--shuffle', action='store_false')
     parser.add_argument('--overshoot', action='store_true')
-    parser.add_argument('--xp', action='store_true')
     parser.add_argument("--freq_write", type=int, default=10)
     parser.add_argument("--freq_save", type=int, default=10)
     parser.add_argument("--seed", type=int, default=0)

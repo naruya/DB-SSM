@@ -51,7 +51,7 @@ class SSM(nn.Module):
         sq_prev = self.sample_s_0(x_0)
         s_0 = sq_prev.detach().clone()
 
-        s_loss, x_loss, s_aux_loss, s_over_loss, xp_loss = 0, 0, 0, 0, 0
+        s_loss, x_loss, s_aux_loss, s_over_loss = 0, 0, 0, 0
 
         _xq, _xp, _q = [], [], []
         for t in range(_T):
@@ -63,10 +63,6 @@ class SSM(nn.Module):
             sq_t = q.rsample()
             xq_t = self.decoder(sq_t)
 
-            if self.args.xp or return_x:
-                sp_t = p.rsample()
-                xp_t = self.decoder(sp_t)
-
             # SSM Losses
             s_loss += torch.sum(
                 kl_divergence(q, p), dim=[1,]).mean()
@@ -76,15 +72,12 @@ class SSM(nn.Module):
             s_aux_loss += kl_divergence(
                 q, self.prior01).mean()
 
-            if self.args.xp:
-                xp_loss += - torch.sum(
-                    Normal(xp_t, torch.ones(x_t.shape, device=x_0.device)).log_prob(x_t),
-                    dim=[1,2,3]).mean()
-
             sq_prev = sq_t
             _q.append(detach_dist(q))
 
             if return_x:
+                sp_t = p.rsample()
+                xp_t = self.decoder(sp_t)
                 _xp.append(xp_t)
                 _xq.append(xq_t)
 
@@ -92,11 +85,11 @@ class SSM(nn.Module):
             return torch.stack(_xq), torch.stack(_xp)
 
         g_loss, d_loss = 0., 0.
+        g_loss += s_loss + x_loss
 
         if self.args.overshoot:
             s_over_loss = self.overshoot(s_0, v, _q)
-
-        g_loss += s_loss + x_loss + s_over_loss + xp_loss
+            g_loss += s_over_loss
 
         return_dict = {
             "loss": g_loss.item(),
@@ -107,9 +100,6 @@ class SSM(nn.Module):
 
         if self.args.overshoot:
             return_dict.update({"s_over_loss": s_over_loss.item()})
-
-        if self.args.xp:
-            return_dict.update({"xp_loss": xp_loss.item()})
 
         return g_loss, d_loss, return_dict
 
