@@ -24,9 +24,12 @@ class MyDataset(Dataset):
         self.vid = np.concatenate(
             [vread(path) for path in vid_paths]).astype(np.uint8)
         self.viw = np.concatenate(
-            [np.load(path) for path in viw_paths]).astype(np.float32)[:, 3:] # xyzrpy
+            [np.load(path) for path in viw_paths]).astype(np.float32)
         # self.mot = np.concatenate(
         #     [np.load(path) for path in mot_paths]).astype(np.float32)
+
+        self.viw = np.deg2rad(self.viw[:, 3:])  # xyzrpy
+        self.viw = np.concatenate([np.sin(self.viw), np.cos(self.viw)], axis=1)
 
         # bug of moviepy?
         if np.sum(self.vid[-2] - self.vid[-1]) == 0:
@@ -35,8 +38,8 @@ class MyDataset(Dataset):
         print(mode, self.vid.shape, self.viw.shape)
 
         if mode == "train":
-            self.viw_mean = self.viw.mean(axis=0)
-            self.viw_std = self.viw.std(axis=0)
+            self.viw_mean = 0. # self.viw.mean(axis=0)
+            self.viw_std = 1. # self.viw.std(axis=0)
             self.viw = ((self.viw - self.viw_mean) / self.viw_std)
             os.makedirs(os.path.join(data_dir, "param"), exist_ok=True)
             np.save(os.path.join(data_dir, "param", "viw_mean.npy"), self.viw_mean)
