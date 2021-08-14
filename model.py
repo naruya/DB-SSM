@@ -41,7 +41,7 @@ class SSM(nn.Module):
         self.prior_snd = Normal(torch.tensor(0.), torch.tensor(1.))
 
         self.g_optimizer = optim.Adam(self.distributions.parameters())
-qq
+
 
     def forward(self, x_0, x, v, train=True, return_x=False):
         _B, _T = x.size(0), x.size(1)
