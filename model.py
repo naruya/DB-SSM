@@ -114,7 +114,8 @@ class SSM(nn.Module):
         for t in range(_T):
             v_t = v[t]
             p = Normal(*self.prior(sp_prev, v_t))
-            sp_t = p.rsample()
+            # sp_t = p.rsample()
+            sp_t = p.mean
             xp_t = self.decoder(sp_t)
             sp_prev = sp_t
             _xv.append(xp_t)
