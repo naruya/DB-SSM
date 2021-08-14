@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import numpy as np
-from torch_utils import ResnetBlock, actvn
+from torch_utils import ResnetBlock, actvn, unwrap_module
 
 
 class Prior(nn.Module):
@@ -27,7 +27,7 @@ class Prior(nn.Module):
 class Posterior(nn.Module):
     def __init__(self, prior, s_dim, h_dim, min_stddev=0.):
         super(Posterior, self).__init__()
-        self.prior = prior
+        self.prior = unwrap_module(prior)
         self.min_stddev = min_stddev
 
         self.fc1 = nn.Linear(s_dim*2 + h_dim, s_dim*2)
@@ -35,19 +35,14 @@ class Posterior(nn.Module):
         self.fc22 = nn.Linear(s_dim*2, s_dim)
 
     def forward(self, s_prev, v, h):
-        if hasattr(self.prior, 'module'):
-            prior = self.prior.module
-        else:
-            prior = self.prior
-
-        loc, scale = prior.forward_shared(s_prev, v)
+        loc, scale = self.prior.forward_shared(s_prev, v)
         h = torch.cat([loc, scale, h], 1)
         h = F.relu(self.fc1(h))
         return self.fc21(h), F.softplus(self.fc22(h)) + self.min_stddev
 
 
 class Encoder(nn.Module):
-    def __init__(self, size=256, num_filters=64, max_filters=256):
+    def __init__(self, h_dim, size=256, num_filters=64, max_filters=256):
         super(Encoder, self).__init__()
 
         s0 = self.s0 = 4
@@ -72,7 +67,7 @@ class Encoder(nn.Module):
         self.resnet = nn.Sequential(*blocks)
         self.conv_img = nn.Conv2d(3, nf, 3, padding=1)
         self.conv_converter = nn.Conv2d(nf1, nf1, kernel_size=4, padding=0)
-        self.fc = nn.Linear(nf1, 1024)
+        self.fc = nn.Linear(nf1, h_dim)
 
     def forward(self, x):
         out = self.conv_img(x)

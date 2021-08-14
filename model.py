@@ -17,6 +17,7 @@ class SSM(nn.Module):
         self.a_dim = a_dim = args.a_dim
         self.h_dim = h_dim = args.h_dim
         self.device = args.device
+        self.beta_snd = args.beta_snd
         self.args = args
 
         self.prior = torch.nn.DataParallel(
@@ -26,7 +27,7 @@ class SSM(nn.Module):
             Posterior(self.prior, s_dim, h_dim, args.min_stddev).to(self.device[0]),
             self.device)
         self.encoder = torch.nn.DataParallel(
-            Encoder(args.size).to(self.device[0]),
+            Encoder(h_dim, args.size).to(self.device[0]),
             self.device)
         self.decoder = torch.nn.DataParallel(
             Decoder(s_dim, args.size).to(self.device[0]),
@@ -36,11 +37,11 @@ class SSM(nn.Module):
             self.prior, self.posterior, self.encoder, self.decoder])
         init_weights(self.distributions)
 
-        # for s_aux_loss
-        self.prior01 = Normal(torch.tensor(0.), scale=torch.tensor(1.))
+        # standard normal distribution (for s_snd_loss)
+        self.prior_snd = Normal(torch.tensor(0.), torch.tensor(1.))
 
         self.g_optimizer = optim.Adam(self.distributions.parameters())
-
+qq
 
     def forward(self, x_0, x, v, train=True, return_x=False):
         _B, _T = x.size(0), x.size(1)
@@ -51,7 +52,7 @@ class SSM(nn.Module):
         sq_prev = self.sample_s_0(x_0)
         s_0 = sq_prev.detach().clone()
 
-        s_loss, x_loss, s_aux_loss, s_over_loss = 0, 0, 0, 0
+        s_loss, x_loss, s_snd_loss, s_over_loss = 0, 0, 0, 0
 
         _xq, _xp, _q = [], [], []
         for t in range(_T):
@@ -65,12 +66,12 @@ class SSM(nn.Module):
 
             # SSM Losses
             s_loss += torch.sum(
-                kl_divergence(q, p), dim=[1,]).mean()
+                kl_divergence(q, p), dim=[1,]).mean()  # p last
             x_loss += - torch.sum(
                 Normal(xq_t, torch.ones(x_t.shape, device=x_0.device)).log_prob(x_t),
                 dim=[1,2,3]).mean()
-            s_aux_loss += kl_divergence(
-                q, self.prior01).mean()
+            s_snd_loss += torch.sum(
+                kl_divergence(self.prior_snd, q), dim=[1,]).mean()  # q last
 
             sq_prev = sq_t
             _q.append(detach_dist(q))
@@ -84,18 +85,17 @@ class SSM(nn.Module):
         if return_x:
             return torch.stack(_xq), torch.stack(_xp)
 
-        g_loss, d_loss = 0., 0.
-        g_loss += s_loss + x_loss
-
         if self.args.overshoot:
             s_over_loss = self.overshoot(s_0, v, _q)
-            g_loss += s_over_loss
+
+        g_loss, d_loss = 0, 0
+        g_loss += s_loss + x_loss + s_over_loss + self.beta_snd*s_snd_loss
 
         return_dict = {
             "loss": g_loss.item(),
             "s_loss": s_loss.item(),
             "x_loss": x_loss.item(),
-            "s_aux_loss": s_aux_loss.item(),
+            "s_snd_loss": s_snd_loss.item(),
         }
 
         if self.args.overshoot:
@@ -152,6 +152,7 @@ class SSM(nn.Module):
 
         return s_loss
 
+
     def sample_s_0(self, x_0):
         device = x_0.device
 
@@ -164,21 +165,21 @@ class SSM(nn.Module):
         return s_t
 
 
+    @torch.no_grad()
     def sample_x(self, x_0, x, v, valid=False):
-        with torch.no_grad():
-            x_list = []  # numpy
-            _x_list = [x.transpose(0, 1)]  # torch
+        x_list = []  # numpy
+        _x_list = [x.transpose(0, 1)]  # torch
 
-            if not valid:
-                _x_list += self.forward(x_0, x, v, False, return_x=True)
-            else:
-                _x_list += self.forward_valid(x_0, v)
+        if not valid:
+            _x_list += self.forward(x_0, x, v, False, return_x=True)
+        else:
+            _x_list += self.forward_valid(x_0, v)
 
-            for _x in _x_list:
-                _x = torch.clamp(_x, 0, 1)
-                _x = _x.transpose(0, 1).detach().cpu().numpy()  # BxT
-                _x = (np.transpose(_x, [0,1,3,4,2]) * 255).astype(np.uint8)
-                x_list.append(_x)
+        for _x in _x_list:
+            _x = torch.clamp(_x, 0, 1)
+            _x = _x.transpose(0, 1).detach().cpu().numpy()  # BxT
+            _x = (np.transpose(_x, [0,1,3,4,2]) * 255).astype(np.uint8)
+            x_list.append(_x)
 
         return x_list
 

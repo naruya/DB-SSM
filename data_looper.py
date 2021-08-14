@@ -4,6 +4,7 @@ from logzero import logger
 import numpy as np
 import torch
 from data_loader import MyDataLoader
+from torch_utils import unwrap_module
 
 
 class MyDataLooper(object):
@@ -13,13 +14,9 @@ class MyDataLooper(object):
         self.max_norm = args.max_norm
         self.iters_to_accumulate = args.iters_to_accumulate
 
+        self.model = unwrap_module(model)
         self.loader = MyDataLoader(mode, args)
         self.valid_loader = MyDataLoader(mode, args, self.loader.dataset)
-
-        if hasattr(model, 'module'):
-            self.model = model.module
-        else:
-            self.model = model
 
 
     def __call__(self, epoch):

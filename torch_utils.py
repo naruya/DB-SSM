@@ -82,6 +82,13 @@ def detach_dist(dist):
         raise NotImplementedError
 
 
+def unwrap_module(module):
+    if hasattr(module, 'module'):
+        return module.module
+    else:
+        return module
+
+
 # https://github.com/akanimax/Variational_Discriminator_Bottleneck/blob/master/source/vdb/Gan_networks.py
 from torch import nn
 from torch.nn import functional as F
