@@ -7,15 +7,8 @@ from skvideo.io import vread
 
 
 class MyDataset(Dataset):
-    def __init__(self, data_dir, mode, T, dataset=None):
+    def __init__(self, data_dir, mode, T):
         self.T = T
-
-        # validation with "mode" dataset
-        if dataset:
-            self.vid = dataset.vid
-            self.viw = dataset.viw
-            # self.mot = dataset.mot
-            return
 
         vid_paths = sorted(glob(os.path.join(data_dir, mode, "video", "*")))
         viw_paths = sorted(glob(os.path.join(data_dir, mode, "view", "*")))
@@ -28,12 +21,12 @@ class MyDataset(Dataset):
         # self.mot = np.concatenate(
         #     [np.load(path) for path in mot_paths]).astype(np.float32)
 
-        self.viw = np.deg2rad(self.viw[:, 3:])  # xyzrpy
-        self.viw = np.concatenate([np.sin(self.viw), np.cos(self.viw)], axis=1)
-
         # bug of moviepy?
         if np.sum(self.vid[-2] - self.vid[-1]) == 0:
             self.vid = self.vid[:-1]
+
+        self.viw = np.deg2rad(self.viw[:, 3:])  # xyzrpy
+        self.viw = np.concatenate([np.sin(self.viw), np.cos(self.viw)], axis=1)
 
         print(mode, self.vid.shape, self.viw.shape)
 
@@ -49,7 +42,6 @@ class MyDataset(Dataset):
             self.viw_std = np.load(os.path.join(data_dir, "param", "viw_std.npy"))
             self.viw = ((self.viw - self.viw_mean) / self.viw_std)
 
-        # assert len(self.vid) == len(self.viw) == len(self.mot), \
         assert len(self.vid) == len(self.viw), \
             "incorrect data length detected!!!"
 
@@ -65,14 +57,23 @@ class MyDataset(Dataset):
         return x_0, x, v
 
 
+# validation with "mode" dataset
+class MyValidDataset(MyDataset):
+    def __init__(self, dataset, T):
+        self.T = T
+        self.vid = dataset.vid
+        self.viw = dataset.viw
+        # self.mot = dataset.mot
+
+
 class MyDataLoader(DataLoader):
     def __init__(self, mode, args, dataset=None):
         if not dataset:
-            B, T = args.B, args.T
-        else:  # validation with "mode" dataset
-            B, T = args.B_val, args.T_val
-
-        dataset = MyDataset(args.data_dir, mode, T, dataset=dataset)
+            B = args.B
+            dataset = MyDataset(args.data_dir, mode, args.T)
+        else:
+            B = args.B_val
+            dataset = MyValidDataset(dataset, args.T_val)
 
         super(MyDataLoader, self).__init__(dataset,
                                            batch_size=B,

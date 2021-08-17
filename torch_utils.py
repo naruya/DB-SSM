@@ -7,7 +7,7 @@ def save_model(model, epoch):
     if hasattr(model, 'module'):
         model = model.module
     print("save model")
-    save_dir = os.path.join("weights", model.args.timestamp)
+    save_dir = os.path.join("weights", model.args.stamp)
     os.makedirs(save_dir, exist_ok=True)
     path = os.path.join(save_dir, "epoch{:05}.pt".format(epoch))
 
@@ -25,7 +25,7 @@ def load_model(model, epoch, model_dir=None):
     if hasattr(model, 'module'):
         model = model.module
     print("load model")
-    save_dir = os.path.join("weights", model.args.timestamp)
+    save_dir = os.path.join("weights", model.args.stamp)
     if model_dir:
         save_dir = os.path.join(model_dir, save_dir)
     path = os.path.join(save_dir, "epoch{:05}.pt".format(epoch))

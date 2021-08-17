@@ -106,7 +106,7 @@ class MyDataLooper(object):
         model = self.model
         model.eval()
 
-        path = "output/{}/epoch{:05}/".format(model.args.timestamp, epoch)
+        path = "output/{}/epoch{:05}/".format(model.args.stamp, epoch)
         os.makedirs(path, exist_ok=True)
 
         try:

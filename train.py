@@ -10,8 +10,8 @@ if __name__ == "__main__":
     args = get_args()
     set_seed(args.seed)
 
-    os.makedirs("logzero", exist_ok=True)
-    logzero.logfile(os.path.join("logzero", args.timestamp + ".txt"))
+    logzero.logfile(
+        os.path.join("logzero", args.stamp + ".txt"))
     logzero.logger.info("args: " + str(args))
 
     model = SSM(args)

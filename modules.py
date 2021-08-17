@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.distributions import Normal
 import numpy as np
 from torch_utils import ResnetBlock, actvn, unwrap_module
 
@@ -21,7 +22,8 @@ class Prior(nn.Module):
 
     def forward(self, s_prev, v):
         loc, scale = self.forward_shared(s_prev, v)
-        return loc, F.softplus(scale) + self.min_stddev
+        scale = F.softplus(scale) + self.min_stddev
+        return loc, scale
 
 
 class Posterior(nn.Module):
@@ -38,7 +40,59 @@ class Posterior(nn.Module):
         loc, scale = self.prior.forward_shared(s_prev, v)
         h = torch.cat([loc, scale, h], 1)
         h = F.relu(self.fc1(h))
-        return self.fc21(h), F.softplus(self.fc22(h)) + self.min_stddev
+        loc, scale = self.fc21(h), self.fc22(h)
+        scale = F.softplus(scale) + self.min_stddev
+        return loc, scale
+
+
+class Prior_R(nn.Module):
+    def __init__(self, s_dim, z_dim, v_dim, a_dim, min_stddev=0.):
+        super(Prior_R, self).__init__()
+        self.min_stddev = min_stddev
+
+        self.fc1 = nn.Linear(s_dim + v_dim + a_dim, s_dim*2)
+        self.rnn = nn.GRUCell(s_dim*2, z_dim)
+        self.fc2 = nn.Linear(z_dim, z_dim*2)
+        self.fc31 = nn.Linear(z_dim*2, s_dim)
+        self.fc32 = nn.Linear(z_dim*2, s_dim)
+
+    def forward_shared(self, s_prev, z_prev, v):
+        h = torch.cat([s_prev, v], 1)
+        h = F.relu(self.fc1(h))
+        z = self.rnn(h, z_prev)
+        return z
+
+    def forward(self, s_prev, z_prev, v):
+        z = self.forward_shared(s_prev, z_prev, v)
+        h = F.relu(self.fc2(z))
+        loc, scale = self.fc31(h), self.fc32(h)
+        scale = F.softplus(scale) + self.min_stddev
+        return loc, scale, z
+
+
+class Posterior_R(nn.Module):
+    def __init__(self, prior, s_dim, z_dim, h_dim, min_stddev=0.):
+        super(Posterior_R, self).__init__()
+        self.prior = unwrap_module(prior)
+        self.min_stddev = min_stddev
+
+        self.fc1 = nn.Linear(z_dim + h_dim, z_dim*2)
+        self.fc21 = nn.Linear(z_dim*2, s_dim)
+        self.fc22 = nn.Linear(z_dim*2, s_dim)
+
+    def forward(self, s_prev, z_prev, v, h):
+        z = self.prior.forward_shared(s_prev, z_prev, v)
+        h = torch.cat([z, h], 1)
+        h = F.relu(self.fc1(h))
+        loc, scale = self.fc21(h), self.fc22(h)
+        scale = F.softplus(scale) + self.min_stddev
+        return loc, scale, z
+
+
+# Prior or Posterior classes shouldn't return `Normal` object directly,
+# otherwise DataParallel errors will occer
+def Normal_and_Belief(loc, scale, z):
+    return Normal(loc, scale), z
 
 
 class Encoder(nn.Module):
