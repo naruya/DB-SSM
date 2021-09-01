@@ -11,12 +11,12 @@ class MyDataLooper(object):
     def __init__(self, model, args, mode):
         self.mode = mode
         self.device = args.device
-        self.max_norm = args.max_norm
         self.iters_to_accumulate = args.iters_to_accumulate
 
         self.model = unwrap_module(model)
         self.loader = MyDataLoader(mode, args)
         self.valid_loader = MyDataLoader(mode, args, self.loader.dataset)
+        self.args = args
 
 
     def __call__(self, epoch):
@@ -59,28 +59,35 @@ class MyDataLooper(object):
         model = self.model
         model.train()
 
+        # zero grad
         model.g_optimizer.zero_grad()
-        # if model.gan:
-        #     model.d_optimizer.zero_grad()
 
-        g_loss, d_loss, return_dict = model.forward(x_0, x, v, True)
+        if self.args.beta_d_sv is not None:
+            model.d_sv_optimizer.zero_grad()
+
+        # backward
+        g_loss, d_sv_loss, return_dict = model.forward(x_0, x, v, True)
         g_loss = g_loss / self.iters_to_accumulate
         g_loss.backward()  # add grads (no param update here)
-        # if model.gan:
-        #     d_loss = d_loss / self.iters_to_accumulate
-        #     d_loss.backward()
 
+        if self.args.beta_d_sv is not None:
+            d_sv_loss = d_sv_loss / self.iters_to_accumulate
+            d_sv_loss.backward()
+
+        # step
         if (self.i + 1) % self.iters_to_accumulate == 0:
-            max_norm = self.max_norm if epoch > 50 else 1e+7
+            max_norm = self.args.max_norm if epoch > 50 else 1e+7
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 model.distributions.parameters(), max_norm)
             return_dict.update({"g_grad_norm": grad_norm.item()})
             model.g_optimizer.step()  # update params
-            # if model.gan:
-            #     grad_norm = torch.nn.utils.clip_grad_norm_(
-            #         model.discriminator.parameters(), 1e+3)
-            #     return_dict.update({"d_grad_norm": grad_norm.item()})
-            #     model.d_optimizer.step()
+
+            if self.args.beta_d_sv is not None:
+                max_norm = self.args.d_sv_max_norm if epoch > 50 else 1e+7
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    model.dis_sv.parameters(), max_norm)
+                return_dict.update({"d_sv_grad_norm": grad_norm.item()})
+                model.d_sv_optimizer.step()
 
             logger.info("({}) Iter: {}/{} {}".format(
                 self.mode, self.i+1, len(self.loader), return_dict))

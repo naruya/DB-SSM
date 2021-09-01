@@ -12,12 +12,12 @@ def save_model(model, epoch):
     path = os.path.join(save_dir, "epoch{:05}.pt".format(epoch))
 
     save_dict = {}
-    for i, dist in enumerate(model.distributions):
-        save_dict.update({"g_net{}".format(i): dist.state_dict()})
-    save_dict.update({"g_opt": model.g_optimizer.state_dict()})
-    # if model.gan:
-    #     save_dict.update({"d_net": model.discriminator.state_dict()})
-    #     save_dict.update({"d_opt": model.d_optimizer.state_dict()})
+    save_dict.update({"distributions": model.distributions.state_dict()})
+    save_dict.update({"g_optimizer": model.g_optimizer.state_dict()})
+
+    if model.args.beta_d_sv is not None:
+        save_dict.update({"dis_sv": model.dis_sv.state_dict()})
+        save_dict.update({"d_sv_optimizer": model.d_sv_optimizer.state_dict()})
     torch.save(save_dict, path)
 
 
@@ -31,12 +31,12 @@ def load_model(model, epoch, model_dir=None):
     path = os.path.join(save_dir, "epoch{:05}.pt".format(epoch))
 
     checkpoint = torch.load(path)
-    for i, dist in enumerate(model.distributions):
-        dist.load_state_dict(checkpoint["g_net{}".format(i)])
-    model.g_optimizer.load_state_dict(checkpoint["g_opt"])
-    # if model.gan:
-    #     model.discriminator.load_state_dict(checkpoint["d_net"])
-    #     model.d_optimizer.load_state_dict(checkpoint["d_opt"])
+    model.distributions.load_state_dict(checkpoint["distributions"])
+    model.g_optimizer.load_state_dict(checkpoint["g_optimizer"])
+
+    if model.args.beta_d_sv is not None:
+        model.dis_sv.load_state_dict(checkpoint["dis_sv"])
+        model.d_sv_optimizer.load_state_dict(checkpoint["d_sv_optimizer"])
 
 
 # https://gist.github.com/jeasinema/ed9236ce743c8efaf30fa2ff732749f5
@@ -68,18 +68,6 @@ def init_weights(model):
             # print("  ", type(m))
             continue
         # print("ok", type(m))
-
-
-from torch.distributions import Normal
-
-
-def detach_dist(dist):
-    if dist.__class__.__name__ == "Normal":
-        loc = dist.loc.detach().clone()
-        scale = dist.scale.detach().clone()
-        return Normal(loc, scale)
-    else:
-        raise NotImplementedError
 
 
 def unwrap_module(module):

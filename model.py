@@ -3,8 +3,8 @@ from torch import nn, optim
 from torch.nn import functional as F
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
-from modules import Prior, Posterior, Prior_R, Posterior_R, Encoder, Decoder, Normal_and_Belief
-from torch_utils import init_weights, save_model, load_model, detach_dist
+from modules import *
+from torch_utils import *
 import numpy as np
 
 
@@ -17,7 +17,7 @@ class SSM(nn.Module):
         self.v_dim = v_dim = args.v_dim
         self.a_dim = a_dim = args.a_dim
         self.h_dim = h_dim = args.h_dim
-        self.z_dim = z_dim = args.z_dim  # only used in RSSM
+        self.z_dim = z_dim = args.z_dim
         self.args = args
 
         if self.args.model == "ssm":
@@ -43,12 +43,14 @@ class SSM(nn.Module):
         self.distributions = nn.ModuleList([
             self.prior, self.posterior, self.encoder, self.decoder])
         init_weights(self.distributions)
-
-        # standard normal distribution (for s_snd_loss)
-        self.prior_snd = Normal(torch.tensor(0.), torch.tensor(1.))
-
         self.g_optimizer = optim.Adam(self.distributions.parameters())
 
+        if self.args.beta_d_sv is not None:
+            self.dis_sv = nn.DataParallel(
+                Discriminator_SV(s_dim, v_dim, self.args.T).to("cuda"), device)
+            init_weights(self.dis_sv)
+            self.d_sv_optimizer = optim.Adam(
+                self.dis_sv.parameters(), lr=0.0002, betas=(0.5, 0.999))
 
     def forward(self, x_0, x, v, train=True, return_x=False):
         _B, _T = x.size(0), x.size(1)
@@ -56,20 +58,18 @@ class SSM(nn.Module):
         v = v.transpose(0, 1)  # T,B,1
         # a = a.transpose(0, 1)  # T,B,1
 
-        # Initialize --------------------------------
-        xq_hist, xp_hist, q_hist, z_hist = [], [], [], []
+        # initialize --------------------------------
+        xq_hist, xp_hist, q_hist, p_hist, z_hist = [], [], [], [], []
 
         if self.args.model == "ssm":
             sq_prev = self.init_hidden(x_0)
-            s_0 = sq_prev.detach().clone()
+            s_0 = sq_prev.clone()  # not detach
         elif self.args.model == "rssm":
             sq_prev, z_prev = self.init_hidden(x_0)
-            s_0 = sq_prev.detach().clone()
-            z_0 = z_prev.detach().clone()
+            s_0 = sq_prev.clone()  # not detach
+            z_0 = z_prev.clone()  # not detach
 
-        # SSM Losses --------------------------------
-        s_loss, x_loss, s_snd_loss = 0, 0, 0  # step losses
-
+        # pure forward --------------------------------
         for t in range(_T):
             x_t, v_t = x[t], v[t]
             h_t = self.encoder(x_t)
@@ -84,51 +84,52 @@ class SSM(nn.Module):
             sq_t = q.rsample()
             xq_t = self.decoder(sq_t)
 
-            s_loss += torch.sum(
-                kl_divergence(q, p), dim=[1,]).mean()  # p last
-            x_loss += - torch.sum(
-                Normal(xq_t, torch.ones(x_t.shape, device=x_0.device)).log_prob(x_t),
-                dim=[1,2,3]).mean()
-            s_snd_loss += torch.sum(
-                kl_divergence(self.prior_snd, q), dim=[1,]).mean()  # q last
-
+            q_hist.append(q)
+            p_hist.append(p)
+            xq_hist.append(xq_t)
             sq_prev = sq_t
-            q_hist.append(detach_dist(q))  # for overshoot
 
             if self.args.model == "rssm":
+                z_hist.append(z_t)
                 z_prev = z_t
-                z_hist.append(z_t.detach().clone())  # for overshoot
 
             if return_x:
                 sp_t = p.rsample()
                 xp_t = self.decoder(sp_t)
                 xp_hist.append(xp_t)
-                xq_hist.append(xq_t)
 
-        if self.args.overshoot:
-            if self.args.model == "ssm":
-                s_over_loss = self.overshoot(s_0, v, q_hist)
-            elif self.args.model == "rssm":
-                s_over_loss = self.overshoot(s_0, v, q_hist, z_0, z_hist)
-        else:
-            s_over_loss = torch.zeros([1])
-
-        # Finalize --------------------------------
         if return_x:
             return torch.stack(xq_hist), torch.stack(xp_hist)
 
-        g_loss, d_loss = 0, 0
-        g_loss += s_loss + x_loss + s_over_loss + self.args.beta_snd*s_snd_loss
-
+        # calc losses
+        g_loss, d_sv_loss = 0, 0
+        s_loss = self.calc_s_loss(q_hist, p_hist)
+        x_loss = self.calc_x_loss(xq_hist, x)
+        g_loss += s_loss + x_loss
         return_dict = {
-            "loss": g_loss.item(),
             "s_loss": s_loss.item(),
             "x_loss": x_loss.item(),
-            "s_snd_loss": s_snd_loss.item(),
-            "s_over_loss": s_over_loss.item(),
         }
 
-        return g_loss, d_loss, return_dict
+        if self.args.beta_s_snd is not None:
+            s_snd_loss = self.calc_s_snd_loss(q_hist)
+            g_loss += s_snd_loss*self.args.beta_s_snd
+            return_dict.update({"s_snd_loss": s_snd_loss.item()})
+
+        if self.args.beta_s_over is not None:
+            s_over_loss = self.calc_s_over_loss(s_0, z_0, v, q_hist, z_hist)
+            g_loss += s_over_loss*self.args.beta_s_over
+            return_dict.update({"s_over_loss": s_over_loss.item()})
+
+        if self.args.beta_d_sv is not None:
+            d_sv_loss, g_sv_loss = self.calc_d_sv_loss(s_0, z_0, v, q_hist, z_hist)
+            g_loss += g_sv_loss*self.args.beta_d_sv
+            return_dict.update({"d_sv_loss": d_sv_loss.item()})
+            return_dict.update({"g_sv_loss": g_sv_loss.item()})
+
+        return_dict.update({"loss": g_loss.item()})
+
+        return g_loss, d_sv_loss, return_dict
 
 
     def forward_valid(self, x_0, v):
@@ -159,48 +160,139 @@ class SSM(nn.Module):
             if self.args.model == "rssm":
                 z_prev = z_t
 
-
         return torch.stack(xv_hist),
 
 
-    def overshoot(self, s_0, v, _q, z_0=None, _z=None):
+    def calc_s_loss(self, q_hist, p_hist):
+        loss = 0.
+        for q, p in zip(q_hist, p_hist):
+            loss += torch.sum(
+                kl_divergence(q, p), dim=[1,]).mean()  # p last
+        return loss
+
+
+    def calc_x_loss(self, xq_hist, x):
+        loss = 0.
+        for xq_t, x_t in zip(xq_hist, x):
+            loss += - torch.sum(
+                Normal(xq_t, torch.ones(x_t.shape, device=x_t.device)).log_prob(x_t),
+                dim=[1,2,3]).mean()
+        return loss
+
+
+    def calc_s_snd_loss(self, q_hist):
+        prior_snd = Normal(torch.tensor(0.), torch.tensor(1.))
+        loss = 0.
+        for q in q_hist:
+            loss += torch.sum(
+                kl_divergence(prior_snd, q), dim=[1,]).mean()  # q last
+        return loss
+
+
+    def calc_d_sv_loss(self, s_0, z_0, v, q_hist, z_hist):
         """
-                              (t=0)          (t=1)          (t=2)
-              q_0 (s_0) -> q_1 (_q[0]) -> q_2 (_q[1]) -> q_3 (_q[2])
-                        \              \              \
-                             p_{1|0}   ->   p_{2|1}   ->   p_{3|2}
-                                       \              \              \
-                                            p_{2|0}   ->   p_{3|1}    (i=2)
-                                                      \              \
-            |                                              p_{3|0}    (i=1)
-            v                                                        \
-          depth                                                       (i=0)
-                              v[0]           v[1]           v[2]
+                        (t=0)          (t=1)          (t=2)        T=3
+            (s_0) ->    q[0]     ->    q[1]     ->    q[2]
+                   \              \              \
+                       p_{0|-1}  ->   p_{1|0}   ->   p_{2|1}
+                                  \              \             \
+                                      p_{1|-1}  ->   p_{2|0}   (t_init= 1)
+                                                 \             \
+            |                                        p_{2|-1}  (t_init= 0)
+            v                                                  \
+          depth                                                (t_init=-1)
+                        v[0]           v[1]           v[2]
         """
+        if self.args.model == "ssm":
+            raise NotImplementedError
+
+        # どこで勾配を止めるか、どこをdetachするか、何を正解とするか、rsampleになってるか
+        _T, _B = v.size(0), v.size(1)
+        real_data = []
+        fake_data = []
+
+        for t_init in range(-1, _T-1):
+            sp_prev = s_0.detach().clone() if t_init==-1 else q_hist[t_init].mean.detach().clone()
+            z_prev = z_0.detach().clone() if t_init==-1 else z_hist[t_init].detach().clone()
+            sq_hist = []
+            sp_hist = []
+
+            for depth, t in enumerate(range(t_init+1, _T)):
+                sq_t = q_hist[t].mean  # .rsample()
+                sq_hist.append(sq_t)
+                real_data.append([torch.stack(sq_hist), v[t_init+1:t+1]])
+
+                p_i_t, z_t = Normal_and_Belief(*self.prior(sp_prev, z_prev, v[t]))
+                sp_t = p_i_t.mean  # rsample()
+                sp_hist.append(sp_t)
+                fake_data.append([torch.stack(sp_hist), v[t_init+1:t+1]])
+
+                sp_prev = sp_t
+                z_prev = z_t
+
+        y_real = torch.ones(_B, 1).to(v.device)
+        y_fake = torch.zeros(_B, 1).to(v.device)
+
+        def make_inp(s, v):
+            x = torch.cat((s, v), 2)  # TxBxC
+            x = x.transpose(0,1).transpose(1,2)  # BxCxT
+            pad = torch.zeros([x.size(0), x.size(1), _T-x.size(2)]).to(x.device)
+            x = torch.cat([x, pad], 2)
+            return x
+
+        d_loss, g_loss = 0., 0.
+
+        # discriminator loss
+        for s, v in real_data:
+            y_pred = self.dis_sv(make_inp(s.detach(), v))  # detach!!!
+            d_loss += F.binary_cross_entropy(y_pred, y_real)
+        for s, v in fake_data:
+            y_pred = self.dis_sv(make_inp(s.detach(), v))  # detach!!!
+            d_loss += F.binary_cross_entropy(y_pred, y_fake)
+
+        # generator loss
+        for v, s in fake_data:
+            y_pred = self.dis_sv(make_inp(s, v))  # don't detach!!!
+            g_loss += F.binary_cross_entropy(y_pred, y_real)
+
+        return d_loss, g_loss
+
+
+    def calc_s_over_loss(self, s_0, z_0, v, q_hist, z_hist):
+        """
+                        (t=0)          (t=1)          (t=2)        T=3
+            (s_0) ->    q[0]     ->    q[1]     ->    q[2]
+                   \              \              \
+                       p_{0|-1}  ->   p_{1|0}   ->   p_{2|1}
+                                  \              \             \
+                                      p_{1|-1}  ->   p_{2|0}   (t_init= 1)
+                                                 \             \
+            |                                        p_{2|-1}  (t_init= 0)
+            v                                                  \
+          depth                                                (t_init=-1)
+                        v[0]           v[1]           v[2]
+        """
+        if self.args.model == "ssm":
+            raise NotImplementedError
 
         _T = len(v)
-        s_loss = 0.
+        loss = 0.
 
-        for i in range(_T):
-            sp_prev = s_0 if i==0 else _q[i-1].mean
-            if self.args.model == "rssm":
-                z_prev = z_0 if i==0 else _z[i-1]
+        for t_init in range(-1, _T-1):
+            sp_prev = s_0.detach().clone() if t_init==-1 else q_hist[t_init].mean.detach().clone()
+            z_prev = z_0.detach().clone() if t_init==-1 else z_hist[t_init].detach().clone()
 
-            for depth, t in enumerate(range(i, _T)):
-                if self.args.model == "ssm":
-                    p = Normal(*self.prior(sp_prev, v[t]))
-                elif self.args.model == "rssm":
-                    p, z_t = Normal_and_Belief(*self.prior(sp_prev, z_prev, v[t]))
-
+            for depth, t in enumerate(range(t_init+1, _T)):
+                p_i_t, z_t = Normal_and_Belief(*self.prior(sp_prev, z_prev, v[t]))
                 if not depth == 0:
-                    s_loss += torch.sum(
-                        kl_divergence(_q[t], p), dim=[1,]).mean()
+                    q_t = Normal(q_hist[t].loc.detach().clone(), q_hist[t].scale.detach().clone())
+                    loss += torch.sum(
+                        kl_divergence(q_t, p_i_t), dim=[1,]).mean()
 
-                sp_prev = p.rsample()
-                if self.args.model == "rssm":
-                    z_prev = z_t
+                sp_prev = p_i_t.rsample()
+                z_prev = z_t
 
-        return s_loss
+        return loss
 
 
     def init_hidden(self, x_0):
