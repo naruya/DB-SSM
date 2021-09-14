@@ -18,8 +18,8 @@ def get_args(args=None):
     parser.add_argument("--a_dim", type=int, default=0)
     parser.add_argument("--h_dim", type=int, default=1024)
     parser.add_argument("--size", type=int, default=128)
-    parser.add_argument('--beta_s_snd', type=float, default=0.)
-    parser.add_argument('--beta_s_over', type=float, default=1.)
+    parser.add_argument('--beta_s_snd', type=float, default=None)
+    parser.add_argument('--beta_s_over', type=float, default=None)
     parser.add_argument('--beta_d_sv', type=float, default=None)
     parser.add_argument('--min_stddev', type=float, default=1e-5)
 
