@@ -1,22 +1,32 @@
 import os
-from utils import *
 from logzero import logger
 import numpy as np
 import torch
-from data_loader import MyDataLoader
-from torch_utils import unwrap_module
+from db_ssm.utils import *
 
 
-class MyDataLooper(object):
-    def __init__(self, model, args, mode):
-        self.mode = mode
+class MyLooper(object):
+    def __init__(self, model, loader, valid_loader, args):
+        self.mode = loader.mode
         self.device = args.device
         self.iters_to_accumulate = args.iters_to_accumulate
 
         self.model = unwrap_module(model)
-        self.loader = MyDataLoader(mode, args)
-        self.valid_loader = MyDataLoader(mode, args, self.loader.dataset)
+        self.loader = loader
+        self.valid_loader = valid_loader
         self.args = args
+
+        if self.mode == "train":
+            self.step = self.train_step
+        elif self.mode == "test":
+            self.step = self.test_step
+
+
+    def _toTensor(self, x_0, x, v):
+        x_0 = x_0.to(self.device[0]).float() / 255.
+        x = x.to(self.device[0]).float() / 255.
+        v = v.to(self.device[0])
+        return x_0, x, v
 
 
     def __call__(self, epoch):
@@ -24,11 +34,7 @@ class MyDataLooper(object):
 
         for x_0, x, v in self.loader:
             x_0, x, v = self._toTensor(x_0, x, v)
-
-            if self.mode == "train":
-                return_dict = self._train(x_0, x, v, epoch)
-            elif self.mode == "test":
-                return_dict = self._test(x_0, x, v, epoch)
+            return_dict = self.step(x_0, x, v, epoch)
 
             if summ is None:
                 keys = return_dict.keys()
@@ -48,14 +54,7 @@ class MyDataLooper(object):
         logger.info("({}) Epoch: {} {}".format(self.mode, epoch, summ))
 
 
-    def _toTensor(self, x_0, x, v):
-        x_0 = x_0.to(self.device[0]).float() / 255.
-        x = x.to(self.device[0]).float() / 255.
-        v = v.to(self.device[0])
-        return x_0, x, v
-
-
-    def _train(self, x_0, x, v, epoch):
+    def train_step(self, x_0, x, v, epoch):
         model = self.model
         model.train()
 
@@ -95,7 +94,7 @@ class MyDataLooper(object):
         return return_dict
 
 
-    def _test(self, x_0, x, v, epoch):
+    def test_step(self, x_0, x, v, epoch):
         model = self.model
         model.eval()
 
@@ -109,11 +108,11 @@ class MyDataLooper(object):
         return return_dict
 
 
-    def write(self, epoch):
+    def valid(self, epoch):
         model = self.model
         model.eval()
 
-        path = "output/{}/epoch{:05}/".format(model.args.stamp, epoch)
+        path = os.path.join(self.args.logs_dir, "outputs", "epoch{:05}".format(epoch))
         os.makedirs(path, exist_ok=True)
 
         try:
@@ -122,17 +121,17 @@ class MyDataLooper(object):
             _x, _xq, _xp = model.sample_x(x_0[:M], x[:M], v[:M])
 
             for i in range(M):
-                make_gif(_x[i], path + "{}_true{:02}.gif".format(self.mode, i))
-                make_gif(_xq[i], path + "{}_qsample{:02}.gif".format(self.mode, i))
-                make_gif(_xp[i], path + "{}_psample{:02}.gif".format(self.mode, i))
+                make_gif(_x[i], os.path.join(path, "{}_true{:02}.gif".format(self.mode, i)))
+                make_gif(_xq[i], os.path.join(path, "{}_qsample{:02}.gif".format(self.mode, i)))
+                make_gif(_xp[i], os.path.join(path, "{}_psample{:02}.gif".format(self.mode, i)))
 
             x_0, x, v = self._toTensor(*iter(self.valid_loader).next())
             M = min(4, len(x))
             _x, _xv = model.sample_x(x_0[:M], x[:M], v[:M], valid=True)
 
             for i in range(M):
-                make_gif(_x[i], path + "{}-v_true{:02}.gif".format(self.mode, i))
-                make_gif(_xv[i], path + "{}-v_pred{:02}.gif".format(self.mode, i))
+                make_gif(_x[i], os.path.join(path, "{}-valid_true{:02}.gif".format(self.mode, i)))
+                make_gif(_xv[i], os.path.join(path, "{}-valid_pred{:02}.gif".format(self.mode, i)))
 
         except ValueError as e:
             logger.warning(e)

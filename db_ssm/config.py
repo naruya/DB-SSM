@@ -1,4 +1,5 @@
 import argparse
+import os
 import subprocess
 from datetime import datetime
 
@@ -7,8 +8,8 @@ def get_args(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, nargs="+", default=[0])
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--stamp", type=str, default=_stamp())
-    parser.add_argument("--ghash", type=str, default=_ghash())
+    parser.add_argument("--stamp", type=str, default=get_stamp())
+    parser.add_argument("--ghash", type=str, default=get_ghash())
     parser.add_argument("--resume_epoch", type=int, default=0)
 
     parser.add_argument("--model", type=str, default="rssm")
@@ -23,7 +24,7 @@ def get_args(args=None):
     parser.add_argument('--beta_d_sv', type=float, default=None)
     parser.add_argument('--min_stddev', type=float, default=1e-5)
 
-    parser.add_argument("--data_dir", type=str, default="./data/")
+    parser.add_argument("--data", type=str, default="tonpy-v1")
     parser.add_argument("--iters_to_accumulate", type=int, default=1)
     parser.add_argument("--B", type=int, default=64)
     parser.add_argument("--B_val", type=int, default=4)
@@ -34,19 +35,23 @@ def get_args(args=None):
     parser.add_argument('--max_norm', type=float, default=1e+7)
     parser.add_argument('--d_sv_max_norm', type=float, default=1e+7)
 
-    parser.add_argument("--freq_write", type=int, default=10)
+    parser.add_argument("--freq_valid", type=int, default=10)
     parser.add_argument("--freq_save", type=int, default=10)
 
     args = parser.parse_args(args)
+
+    args.data_dir = os.path.join("data", args.data)
+    args.logs_dir = os.path.join("logs", args.data, args.stamp)
+
     return args
 
 
-def _stamp():
+def get_stamp():
     stamp = datetime.now().strftime("%b%d_%H%M%S")
     return stamp
 
 
-def _ghash():
+def get_ghash():
     ghash = subprocess.check_output(
         "git rev-parse --short HEAD".split()).strip().decode('utf-8')
     return ghash

@@ -1,12 +1,5 @@
 data/*
-logzero/*
-output/*
-weights/*
-
-!data/.gitkeep
-!logzero/.gitkeep
-!output/.gitkeep
-!weights/.gitkeep
+logs/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

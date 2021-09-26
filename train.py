@@ -1,22 +1,34 @@
 import os
 import logzero
-from config import get_args
-from utils import *
-from model import SSM
-from data_looper import MyDataLooper
+import numpy
+import torch
+from db_ssm.model import SSM
+from db_ssm.datasets import MyLoader
+from db_ssm.trainer import MyLooper
+from db_ssm.config import get_args
 
 
 if __name__ == "__main__":
     args = get_args()
-    set_seed(args.seed)
 
-    logzero.logfile(
-        os.path.join("logzero", args.stamp + ".txt"))
-    logzero.logger.info("args: " + str(args))
+    numpy.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+    os.makedirs(args.logs_dir, exist_ok=True)
+    logzero.logfile(os.path.join(args.logs_dir, "log.txt"))
+    logzero.logger.info(args)
 
     model = SSM(args)
-    train_looper = MyDataLooper(model, args, "train")
-    test_looper = MyDataLooper(model, args, "test")
+
+    train_loader = MyLoader((args.data_dir, "train"), args.B, args.T)
+    test_loader = MyLoader((args.data_dir, "test"), args.B, args.T)
+    train_valid_loader = MyLoader(train_loader.dataset, args.B_val, args.T_val)
+    test_valid_loader = MyLoader(test_loader.dataset, args.B_val, args.T_val)
+
+    train_looper = MyLooper(model, train_loader, train_valid_loader, args)
+    test_looper = MyLooper(model, test_loader, test_valid_loader, args)
 
     if args.resume_epoch > 0:
         model.load(args.resume_epoch)
@@ -29,6 +41,6 @@ if __name__ == "__main__":
             model.save(epoch)
             model.load(epoch)
 
-        if epoch % args.freq_write == 0:
-            train_looper.write(epoch)
-            test_looper.write(epoch)
+        if epoch % args.freq_valid == 0:
+            train_looper.valid(epoch)
+            test_looper.valid(epoch)

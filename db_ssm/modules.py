@@ -1,9 +1,9 @@
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.distributions import Normal
-import numpy as np
-from torch_utils import ResnetBlock, actvn, unwrap_module
+from db_ssm.utils import ResnetBlock, unwrap_module
 
 
 class Prior(nn.Module):
@@ -126,9 +126,9 @@ class Encoder(nn.Module):
     def forward(self, x):
         out = self.conv_img(x)
         out = self.resnet(out)
-        out = self.conv_converter(actvn(out))
+        out = self.conv_converter(F.relu(out))
         out = out.squeeze(-1).squeeze(-1)
-        out = self.fc(actvn(out))
+        out = self.fc(F.relu(out))
         return out
 
 
@@ -167,7 +167,7 @@ class Decoder(nn.Module):
         out = self.fc(s)
         out = out.view(batch_size, self.nf0, self.s0, self.s0)
         out = self.resnet(out)
-        out = self.conv_img(actvn(out))
+        out = self.conv_img(F.relu(out))
         return out
 
 

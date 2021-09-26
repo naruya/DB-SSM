@@ -1,18 +1,18 @@
 import os
+import glob
 import random
-from glob import glob
 import numpy as np
-from torch.utils.data import Dataset, DataLoader
 from skvideo.io import vread
+from torch.utils.data import Dataset, DataLoader
 
 
 class MyDataset(Dataset):
     def __init__(self, data_dir, mode, T):
         self.T = T
 
-        vid_paths = sorted(glob(os.path.join(data_dir, mode, "video", "*")))
-        viw_paths = sorted(glob(os.path.join(data_dir, mode, "view", "*")))
-        # mot_paths = sorted(glob(os.path.join(data_dir, mode, "motion", "*")))
+        vid_paths = sorted(glob.glob(os.path.join(data_dir, mode, "video", "*")))
+        viw_paths = sorted(glob.glob(os.path.join(data_dir, mode, "view", "*")))
+        # mot_paths = sorted(glob.glob(os.path.join(data_dir, mode, "motion", "*")))
 
         self.vid = np.concatenate(
             [vread(path) for path in vid_paths]).astype(np.uint8)
@@ -66,18 +66,18 @@ class MyValidDataset(MyDataset):
         # self.mot = dataset.mot
 
 
-class MyDataLoader(DataLoader):
-    def __init__(self, mode, args, dataset=None):
-        if not dataset:
-            B = args.B
-            dataset = MyDataset(args.data_dir, mode, args.T)
+class MyLoader(DataLoader):
+    def __init__(self, dataset, B, T):
+        if type(dataset) == tuple:
+            data_dir, mode = dataset
+            dataset = MyDataset(data_dir, mode, T)
+            self.mode = mode
         else:
-            B = args.B_val
-            dataset = MyValidDataset(dataset, args.T_val)
+            dataset = MyValidDataset(dataset, T)
 
-        super(MyDataLoader, self).__init__(dataset,
-                                           batch_size=B,
-                                           shuffle=True,
-                                           drop_last=True,
-                                           num_workers=4,
-                                           pin_memory=True)
+        super(MyLoader, self).__init__(dataset,
+                                       batch_size=B,
+                                       shuffle=True,
+                                       drop_last=True,
+                                       num_workers=4,
+                                       pin_memory=True)

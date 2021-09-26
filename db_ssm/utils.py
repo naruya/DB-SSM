@@ -1,43 +1,24 @@
-import os
-import torch
+# --------------------------------
+
+import moviepy.editor as mpy
+
+def make_gif(frames, filename):
+    clip = mpy.ImageSequenceClip(list(frames), fps=30)
+    clip.write_gif(filename)
+
+
+# --------------------------------
+
+def unwrap_module(module):
+    if hasattr(module, 'module'):
+        return module.module
+    else:
+        return module
+
+
+# --------------------------------
+
 from torch import nn
-
-
-def save_model(model, epoch):
-    if hasattr(model, 'module'):
-        model = model.module
-    print("save model")
-    save_dir = os.path.join("weights", model.args.stamp)
-    os.makedirs(save_dir, exist_ok=True)
-    path = os.path.join(save_dir, "epoch{:05}.pt".format(epoch))
-
-    save_dict = {}
-    save_dict.update({"distributions": model.distributions.state_dict()})
-    save_dict.update({"g_optimizer": model.g_optimizer.state_dict()})
-
-    if model.args.beta_d_sv is not None:
-        save_dict.update({"dis_sv": model.dis_sv.state_dict()})
-        save_dict.update({"d_sv_optimizer": model.d_sv_optimizer.state_dict()})
-    torch.save(save_dict, path)
-
-
-def load_model(model, epoch, model_dir=None):
-    if hasattr(model, 'module'):
-        model = model.module
-    print("load model")
-    save_dir = os.path.join("weights", model.args.stamp)
-    if model_dir:
-        save_dir = os.path.join(model_dir, save_dir)
-    path = os.path.join(save_dir, "epoch{:05}.pt".format(epoch))
-
-    checkpoint = torch.load(path)
-    model.distributions.load_state_dict(checkpoint["distributions"])
-    model.g_optimizer.load_state_dict(checkpoint["g_optimizer"])
-
-    if model.args.beta_d_sv is not None:
-        model.dis_sv.load_state_dict(checkpoint["dis_sv"])
-        model.d_sv_optimizer.load_state_dict(checkpoint["d_sv_optimizer"])
-
 
 # https://gist.github.com/jeasinema/ed9236ce743c8efaf30fa2ff732749f5
 def init_weights(model):
@@ -70,18 +51,13 @@ def init_weights(model):
         # print("ok", type(m))
 
 
-def unwrap_module(module):
-    if hasattr(module, 'module'):
-        return module.module
-    else:
-        return module
+# --------------------------------
 
-
-# https://github.com/akanimax/Variational_Discriminator_Bottleneck/blob/master/source/vdb/Gan_networks.py
 from torch import nn
 from torch.nn import functional as F
 
-
+# https://github.com/akanimax/Variational_Discriminator_Bottleneck/blob/master/source/vdb/Gan_networks.py
+# leaky_relu -> relu
 class ResnetBlock(nn.Module):
     """
     Resnet Block Sub-module for the Generator and the Discriminator
@@ -128,8 +104,8 @@ class ResnetBlock(nn.Module):
         x_s = self._shortcut(x)
 
         # calculate the straight path
-        dx = self.conv_0(actvn(x))
-        dx = self.conv_1(actvn(dx))
+        dx = self.conv_0(F.relu(x))
+        dx = self.conv_1(F.relu(dx))
 
         # combine the two paths via addition
         out = x_s + alpha * dx  # note the use of alpha weighter
@@ -147,14 +123,3 @@ class ResnetBlock(nn.Module):
         else:
             x_s = x
         return x_s
-
-
-def actvn(x):
-    """
-    utility helper for leaky Relu activation
-    :param x: input tensor
-    :return: activation applied tensor
-    """
-    # out = F.leaky_relu(x, 2e-1)
-    out = F.relu(x)
-    return out

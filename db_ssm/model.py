@@ -1,11 +1,12 @@
+import os
+import numpy as np
 import torch
 from torch import nn, optim
 from torch.nn import functional as F
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
-from modules import *
-from torch_utils import *
-import numpy as np
+from db_ssm.modules import *
+from db_ssm.utils import *
 
 
 class SSM(nn.Module):
@@ -22,23 +23,23 @@ class SSM(nn.Module):
 
         if self.args.model == "ssm":
             self.prior = nn.DataParallel(
-                Prior(s_dim, v_dim, a_dim, args.min_stddev).to("cuda"), device)
+                Prior(s_dim, v_dim, a_dim, args.min_stddev).to(device[0]), device)
             self.posterior = nn.DataParallel(
-                Posterior(self.prior, s_dim, h_dim, args.min_stddev).to("cuda"), device)
+                Posterior(self.prior, s_dim, h_dim, args.min_stddev).to(device[0]), device)
             self.encoder = nn.DataParallel(
-                Encoder(h_dim, args.size).to("cuda"), device)
+                Encoder(h_dim, args.size).to(device[0]), device)
             self.decoder = nn.DataParallel(
-                Decoder(s_dim, args.size).to("cuda"), device)
+                Decoder(s_dim, args.size).to(device[0]), device)
 
         elif self.args.model == "rssm":
             self.prior = nn.DataParallel(
-                Prior_R(s_dim, z_dim, v_dim, a_dim, args.min_stddev).to("cuda"), device)
+                Prior_R(s_dim, z_dim, v_dim, a_dim, args.min_stddev).to(device[0]), device)
             self.posterior = nn.DataParallel(
-                Posterior_R(self.prior, s_dim, z_dim, h_dim, args.min_stddev).to("cuda"), device)
+                Posterior_R(self.prior, s_dim, z_dim, h_dim, args.min_stddev).to(device[0]), device)
             self.encoder = nn.DataParallel(
-                Encoder(h_dim, args.size).to("cuda"), device)
+                Encoder(h_dim, args.size).to(device[0]), device)
             self.decoder = nn.DataParallel(
-                Decoder(s_dim, args.size).to("cuda"), device)
+                Decoder(s_dim, args.size).to(device[0]), device)
 
         self.distributions = nn.ModuleList([
             self.prior, self.posterior, self.encoder, self.decoder])
@@ -47,10 +48,11 @@ class SSM(nn.Module):
 
         if self.args.beta_d_sv is not None:
             self.dis_sv = nn.DataParallel(
-                Discriminator_SV(s_dim, v_dim, self.args.T).to("cuda"), device)
+                Discriminator_SV(s_dim, v_dim, self.args.T).to(device[0]), device)
             init_weights(self.dis_sv)
             self.d_sv_optimizer = optim.Adam(
                 self.dis_sv.parameters(), lr=0.0002, betas=(0.5, 0.999))
+
 
     def forward(self, x_0, x, v, train=True, return_x=False):
         _B, _T = x.size(0), x.size(1)
@@ -365,8 +367,36 @@ class SSM(nn.Module):
 
 
     def save(self, epoch):
-        save_model(self, epoch)
+        print("save model")
+
+        self = unwrap_module(self)
+        save_dir = os.path.join(self.args.logs_dir, "weights")
+        os.makedirs(save_dir, exist_ok=True)
+        path = os.path.join(save_dir, "epoch{:05}.pt".format(epoch))
+
+        save_dict = {}
+        save_dict.update({"distributions": self.distributions.state_dict()})
+        save_dict.update({"g_optimizer": self.g_optimizer.state_dict()})
+
+        if self.args.beta_d_sv is not None:
+            save_dict.update({"dis_sv": self.dis_sv.state_dict()})
+            save_dict.update({"d_sv_optimizer": self.d_sv_optimizer.state_dict()})
+
+        torch.save(save_dict, path)
 
 
-    def load(self, epoch, model_dir=None):
-        load_model(self, epoch, model_dir)
+    def load(self, epoch, load_dir=None):
+        print("load model")
+
+        self = unwrap_module(self)
+        if not load_dir:
+            load_dir = os.path.join(self.args.logs_dir, "weights")
+        path = os.path.join(load_dir, "epoch{:05}.pt".format(epoch))
+
+        checkpoint = torch.load(path)
+        self.distributions.load_state_dict(checkpoint["distributions"])
+        self.g_optimizer.load_state_dict(checkpoint["g_optimizer"])
+
+        if self.args.beta_d_sv is not None:
+            self.dis_sv.load_state_dict(checkpoint["dis_sv"])
+            self.d_sv_optimizer.load_state_dict(checkpoint["d_sv_optimizer"])
