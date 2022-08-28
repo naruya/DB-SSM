@@ -86,7 +86,7 @@ class MyLooper(object):
         model.eval()
 
         with torch.no_grad():
-            g_loss, d_loss, return_dict = model.forward(x_0, x, v, False)
+            g_loss, return_dict = model.forward(x_0, x, v, False)
 
         if (self.i + 1) % self.iters_to_accumulate == 0:
             logger.info("({}) Iter: {}/{} {}".format(
