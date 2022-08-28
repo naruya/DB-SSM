@@ -169,35 +169,3 @@ class Decoder(nn.Module):
         out = self.resnet(out)
         out = self.conv_img(F.relu(out))
         return out
-
-
-class Discriminator_SV(nn.Module):
-    def __init__(self, s_dim, v_dim, T):
-        super(Discriminator_SV, self).__init__()
-        self.T = T
-
-        DIM = 128
-        self.main = nn.Sequential(
-            nn.Conv1d(s_dim+v_dim, DIM, kernel_size=4, stride=1, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),  # BxCx9
-
-            nn.Conv1d(DIM, DIM, kernel_size=4, stride=1, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(DIM),  # BxCx8
-
-            nn.Conv1d(DIM, DIM, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(DIM),  # BxCx4
-
-            nn.Conv1d(DIM, DIM, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(DIM),  # BxCx2
-
-            nn.Flatten(),
-            nn.Linear(DIM*((T-2)//2//2), 1),
-            nn.Sigmoid(),
-        )
-
-    def forward(self, x):  # BxCxT
-        x = self.main(x)
-        return x

@@ -21,7 +21,6 @@ def get_args(args=None):
     parser.add_argument("--size", type=int, default=128)
     parser.add_argument('--beta_s_snd', type=float, default=None)
     parser.add_argument('--beta_s_over', type=float, default=None)
-    parser.add_argument('--beta_d_sv', type=float, default=None)
     parser.add_argument('--min_stddev', type=float, default=1e-5)
 
     parser.add_argument("--data", type=str, default="../data")
@@ -34,7 +33,6 @@ def get_args(args=None):
 
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument('--max_norm', type=float, default=1e+7)
-    parser.add_argument('--d_sv_max_norm', type=float, default=1e+7)
 
     parser.add_argument("--freq_valid", type=int, default=10)
     parser.add_argument("--freq_save", type=int, default=10)

@@ -46,13 +46,6 @@ class SSM(nn.Module):
         init_weights(self.distributions)
         self.g_optimizer = optim.Adam(self.distributions.parameters())
 
-        if self.args.beta_d_sv is not None:
-            self.dis_sv = nn.DataParallel(
-                Discriminator_SV(s_dim, v_dim, self.args.T).to(device[0]), device)
-            init_weights(self.dis_sv)
-            self.d_sv_optimizer = optim.Adam(
-                self.dis_sv.parameters(), lr=0.0002, betas=(0.5, 0.999))
-
 
     def forward(self, x_0, x, v, train=True, return_x=False):
         _B, _T = x.size(0), x.size(1)
@@ -104,7 +97,7 @@ class SSM(nn.Module):
             return torch.stack(xq_hist), torch.stack(xp_hist)
 
         # calc losses
-        g_loss, d_sv_loss = 0, 0
+        g_loss = 0
         s_loss = self.calc_s_loss(q_hist, p_hist)
         x_loss = self.calc_x_loss(xq_hist, x)
         g_loss += s_loss + x_loss
@@ -126,15 +119,9 @@ class SSM(nn.Module):
             g_loss += s_over_loss*self.args.beta_s_over
             return_dict.update({"s_over_loss": s_over_loss.item()})
 
-        if self.args.beta_d_sv is not None:
-            d_sv_loss, g_sv_loss = self.calc_d_sv_loss(s_0, z_0, v, q_hist, z_hist)
-            g_loss += g_sv_loss*self.args.beta_d_sv
-            return_dict.update({"d_sv_loss": d_sv_loss.item()})
-            return_dict.update({"g_sv_loss": g_sv_loss.item()})
-
         return_dict.update({"loss": g_loss.item()})
 
-        return g_loss, d_sv_loss, return_dict
+        return g_loss, return_dict
 
 
     def forward_valid(self, x_0, v):
@@ -192,75 +179,6 @@ class SSM(nn.Module):
             loss += torch.sum(
                 kl_divergence(prior_snd, q), dim=[1,]).mean()  # q last
         return loss
-
-
-    def calc_d_sv_loss(self, s_0, z_0, v, q_hist, z_hist):
-        """
-                        (t=0)          (t=1)          (t=2)        T=3
-            (s_0) ->    q[0]     ->    q[1]     ->    q[2]
-                   \              \              \
-                       p_{0|-1}  ->   p_{1|0}   ->   p_{2|1}
-                                  \              \             \
-                                      p_{1|-1}  ->   p_{2|0}   (t_init= 1)
-                                                 \             \
-            |                                        p_{2|-1}  (t_init= 0)
-            v                                                  \
-          depth                                                (t_init=-1)
-                        v[0]           v[1]           v[2]
-        """
-        if self.args.model == "ssm":
-            raise NotImplementedError
-
-        # どこで勾配を止めるか、どこをdetachするか、何を正解とするか、rsampleになってるか
-        _T, _B = v.size(0), v.size(1)
-        real_data = []
-        fake_data = []
-
-        for t_init in range(-1, _T-1):
-            sp_prev = s_0.detach().clone() if t_init==-1 else q_hist[t_init].mean.detach().clone()
-            z_prev = z_0.detach().clone() if t_init==-1 else z_hist[t_init].detach().clone()
-            sq_hist = []
-            sp_hist = []
-
-            for depth, t in enumerate(range(t_init+1, _T)):
-                sq_t = q_hist[t].mean  # .rsample()
-                sq_hist.append(sq_t)
-                real_data.append([torch.stack(sq_hist), v[t_init+1:t+1]])
-
-                p_i_t, z_t = Normal_and_Belief(*self.prior(sp_prev, z_prev, v[t]))
-                sp_t = p_i_t.mean  # rsample()
-                sp_hist.append(sp_t)
-                fake_data.append([torch.stack(sp_hist), v[t_init+1:t+1]])
-
-                sp_prev = sp_t
-                z_prev = z_t
-
-        y_real = torch.ones(_B, 1).to(v.device)
-        y_fake = torch.zeros(_B, 1).to(v.device)
-
-        def make_inp(s, v):
-            x = torch.cat((s, v), 2)  # TxBxC
-            x = x.transpose(0,1).transpose(1,2)  # BxCxT
-            pad = torch.zeros([x.size(0), x.size(1), _T-x.size(2)]).to(x.device)
-            x = torch.cat([x, pad], 2)
-            return x
-
-        d_loss, g_loss = 0., 0.
-
-        # discriminator loss
-        for s, v in real_data:
-            y_pred = self.dis_sv(make_inp(s.detach(), v))  # detach!!!
-            d_loss += F.binary_cross_entropy(y_pred, y_real)
-        for s, v in fake_data:
-            y_pred = self.dis_sv(make_inp(s.detach(), v))  # detach!!!
-            d_loss += F.binary_cross_entropy(y_pred, y_fake)
-
-        # generator loss
-        for v, s in fake_data:
-            y_pred = self.dis_sv(make_inp(s, v))  # don't detach!!!
-            g_loss += F.binary_cross_entropy(y_pred, y_real)
-
-        return d_loss, g_loss
 
 
     def calc_s_over_loss(self, *args):
@@ -396,11 +314,6 @@ class SSM(nn.Module):
         save_dict = {}
         save_dict.update({"distributions": self.distributions.state_dict()})
         save_dict.update({"g_optimizer": self.g_optimizer.state_dict()})
-
-        if self.args.beta_d_sv is not None:
-            save_dict.update({"dis_sv": self.dis_sv.state_dict()})
-            save_dict.update({"d_sv_optimizer": self.d_sv_optimizer.state_dict()})
-
         torch.save(save_dict, path)
 
 
@@ -415,7 +328,3 @@ class SSM(nn.Module):
         checkpoint = torch.load(path)
         self.distributions.load_state_dict(checkpoint["distributions"])
         self.g_optimizer.load_state_dict(checkpoint["g_optimizer"])
-
-        if self.args.beta_d_sv is not None:
-            self.dis_sv.load_state_dict(checkpoint["dis_sv"])
-            self.d_sv_optimizer.load_state_dict(checkpoint["d_sv_optimizer"])

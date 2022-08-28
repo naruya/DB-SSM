@@ -61,17 +61,10 @@ class MyLooper(object):
         # zero grad
         model.g_optimizer.zero_grad()
 
-        if self.args.beta_d_sv is not None:
-            model.d_sv_optimizer.zero_grad()
-
         # backward
-        g_loss, d_sv_loss, return_dict = model.forward(x_0, x, v, True)
+        g_loss, return_dict = model.forward(x_0, x, v, True)
         g_loss = g_loss / self.iters_to_accumulate
         g_loss.backward()  # add grads (no param update here)
-
-        if self.args.beta_d_sv is not None:
-            d_sv_loss = d_sv_loss / self.iters_to_accumulate
-            d_sv_loss.backward()
 
         # step
         if (self.i + 1) % self.iters_to_accumulate == 0:
@@ -81,13 +74,6 @@ class MyLooper(object):
                 model.distributions.parameters(), max_norm)
             return_dict.update({"g_grad_norm": grad_norm.item()})
             model.g_optimizer.step()  # update params
-
-            if self.args.beta_d_sv is not None:
-                max_norm = self.args.d_sv_max_norm if epoch > 50 else 1e+7
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    model.dis_sv.parameters(), max_norm)
-                return_dict.update({"d_sv_grad_norm": grad_norm.item()})
-                model.d_sv_optimizer.step()
 
             logger.info("({}) Iter: {}/{} {}".format(
                 self.mode, self.i+1, len(self.loader), return_dict))
