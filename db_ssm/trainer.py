@@ -75,7 +75,8 @@ class MyLooper(object):
 
         # step
         if (self.i + 1) % self.iters_to_accumulate == 0:
-            max_norm = self.args.max_norm if epoch > 50 else 1e+7
+            max_norm = self.args.max_norm
+            # max_norm = self.args.max_norm if epoch > 50 else 1e+7
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 model.distributions.parameters(), max_norm)
             return_dict.update({"g_grad_norm": grad_norm.item()})
@@ -112,7 +113,7 @@ class MyLooper(object):
         model = self.model
         model.eval()
 
-        path = os.path.join(self.args.logs_dir, "outputs", "epoch{:05}".format(epoch))
+        path = os.path.join(self.args.logs, self.args.stamp, "outputs", "epoch{:05}".format(epoch))
         os.makedirs(path, exist_ok=True)
 
         try:

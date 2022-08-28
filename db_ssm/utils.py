@@ -1,10 +1,9 @@
 # --------------------------------
 
-import moviepy.editor as mpy
+import imageio
 
 def make_gif(frames, filename):
-    clip = mpy.ImageSequenceClip(list(frames), fps=30)
-    clip.write_gif(filename)
+    imageio.mimwrite(filename, frames)
 
 
 # --------------------------------

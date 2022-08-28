@@ -119,7 +119,10 @@ class SSM(nn.Module):
             return_dict.update({"s_snd_loss": s_snd_loss.item()})
 
         if self.args.beta_s_over is not None:
-            s_over_loss = self.calc_s_over_loss(s_0, z_0, v, q_hist, z_hist)
+            if self.args.model == "ssm":
+                s_over_loss = self.calc_s_over_loss(s_0, v, q_hist)
+            elif self.args.model == "rssm":
+                s_over_loss = self.calc_s_over_loss(s_0, z_0, v, q_hist, z_hist)
             g_loss += s_over_loss*self.args.beta_s_over
             return_dict.update({"s_over_loss": s_over_loss.item()})
 
@@ -140,18 +143,18 @@ class SSM(nn.Module):
         # a = a.transpose(0, 1)  # T,B,1
 
         if self.args.model == "ssm":
-            sq_prev = self.init_hidden(x_0)
+            sp_prev = self.init_hidden(x_0)  # not sq_prev
         elif self.args.model == "rssm":
-            sq_prev, z_prev = self.init_hidden(x_0)
+            sp_prev, z_prev = self.init_hidden(x_0)  # not sq_prev
 
         xv_hist = []
         for t in range(_T):
             v_t = v[t]
 
             if self.args.model == "ssm":
-                p = Normal(*self.prior(sq_prev, v_t))
+                p = Normal(*self.prior(sp_prev, v_t))
             elif self.args.model == "rssm":
-                p, z_t = Normal_and_Belief(*self.prior(sq_prev, z_prev, v_t))
+                p, z_t = Normal_and_Belief(*self.prior(sp_prev, z_prev, v_t))
 
             # sp_t = p.rsample()
             sp_t = p.mean
@@ -260,7 +263,7 @@ class SSM(nn.Module):
         return d_loss, g_loss
 
 
-    def calc_s_over_loss(self, s_0, z_0, v, q_hist, z_hist):
+    def calc_s_over_loss(self, *args):
         """
                         (t=0)          (t=1)          (t=2)        T=3
             (s_0) ->    q[0]     ->    q[1]     ->    q[2]
@@ -274,25 +277,41 @@ class SSM(nn.Module):
           depth                                                (t_init=-1)
                         v[0]           v[1]           v[2]
         """
-        if self.args.model == "ssm":
-            raise NotImplementedError
-
-        _T = len(v)
         loss = 0.
 
-        for t_init in range(-1, _T-1):
-            sp_prev = s_0.detach().clone() if t_init==-1 else q_hist[t_init].mean.detach().clone()
-            z_prev = z_0.detach().clone() if t_init==-1 else z_hist[t_init].detach().clone()
+        if self.args.model == "ssm":
+            s_0, v, q_hist = args
+            _T = len(v)
 
-            for depth, t in enumerate(range(t_init+1, _T)):
-                p_i_t, z_t = Normal_and_Belief(*self.prior(sp_prev, z_prev, v[t]))
-                if not depth == 0:
-                    q_t = Normal(q_hist[t].loc.detach().clone(), q_hist[t].scale.detach().clone())
-                    loss += torch.sum(
-                        kl_divergence(q_t, p_i_t), dim=[1,]).mean()
+            for t_init in range(-1, _T-1):
+                sp_prev = s_0.detach().clone() if t_init==-1 else q_hist[t_init].mean.detach().clone()
 
-                sp_prev = p_i_t.rsample()
-                z_prev = z_t
+                for depth, t in enumerate(range(t_init+1, _T)):
+                    p_i_t = Normal(*self.prior(sp_prev, v[t]))
+
+                    if not depth == 0:
+                        q_t = Normal(q_hist[t].loc.detach().clone(), q_hist[t].scale.detach().clone())
+                        loss += torch.sum(kl_divergence(q_t, p_i_t), dim=[1,]).mean()
+
+                    sp_prev = p_i_t.rsample()
+
+        elif self.args.model == "rssm":
+            s_0, z_0, v, q_hist, z_hist = args
+            _T = len(v)
+
+            for t_init in range(-1, _T-1):
+                sp_prev = s_0.detach().clone() if t_init==-1 else q_hist[t_init].mean.detach().clone()
+                z_prev = z_0.detach().clone() if t_init==-1 else z_hist[t_init].detach().clone()
+
+                for depth, t in enumerate(range(t_init+1, _T)):
+                    p_i_t, z_t = Normal_and_Belief(*self.prior(sp_prev, z_prev, v[t]))
+
+                    if not depth == 0:
+                        q_t = Normal(q_hist[t].loc.detach().clone(), q_hist[t].scale.detach().clone())
+                        loss += torch.sum(kl_divergence(q_t, p_i_t), dim=[1,]).mean()
+
+                    sp_prev = p_i_t.rsample()
+                    z_prev = z_t
 
         return loss
 
@@ -370,7 +389,7 @@ class SSM(nn.Module):
         print("save model")
 
         self = unwrap_module(self)
-        save_dir = os.path.join(self.args.logs_dir, "weights")
+        save_dir = os.path.join(self.args.logs, self.args.stamp, "weights")
         os.makedirs(save_dir, exist_ok=True)
         path = os.path.join(save_dir, "epoch{:05}.pt".format(epoch))
 
@@ -390,7 +409,7 @@ class SSM(nn.Module):
 
         self = unwrap_module(self)
         if not load_dir:
-            load_dir = os.path.join(self.args.logs_dir, "weights")
+            load_dir = os.path.join(self.args.logs, self.args.stamp, "weights")
         path = os.path.join(load_dir, "epoch{:05}.pt".format(epoch))
 
         checkpoint = torch.load(path)

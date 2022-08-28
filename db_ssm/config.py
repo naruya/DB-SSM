@@ -24,12 +24,13 @@ def get_args(args=None):
     parser.add_argument('--beta_d_sv', type=float, default=None)
     parser.add_argument('--min_stddev', type=float, default=1e-5)
 
-    parser.add_argument("--data", type=str, default="tonpy-v1")
+    parser.add_argument("--data", type=str, default="../data")
+    parser.add_argument("--logs", type=str, default="../logs")
     parser.add_argument("--iters_to_accumulate", type=int, default=1)
     parser.add_argument("--B", type=int, default=64)
     parser.add_argument("--B_val", type=int, default=4)
     parser.add_argument("--T", type=int, default=10)
-    parser.add_argument("--T_val", type=int, default=300)
+    parser.add_argument("--T_val", type=int, default=10)
 
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument('--max_norm', type=float, default=1e+7)
@@ -38,12 +39,7 @@ def get_args(args=None):
     parser.add_argument("--freq_valid", type=int, default=10)
     parser.add_argument("--freq_save", type=int, default=10)
 
-    args = parser.parse_args(args)
-
-    args.data_dir = os.path.join("data", args.data)
-    args.logs_dir = os.path.join("logs", args.data, args.stamp)
-
-    return args
+    return parser.parse_args(args)
 
 
 def get_stamp():
