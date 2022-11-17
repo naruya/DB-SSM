@@ -253,15 +253,18 @@ class SSM(nn.Module):
 
 
     @torch.no_grad()
-    def sample_x(self, x_0, x, v, valid=False):
-        x_list = []                    # numpy
-        _x_list = [x.transpose(0, 1)]  # torch
+    def sample_x(self, x_0, x=None, v=None, valid=False):
+        if x is None:
+            _x_list = []
+        else:
+            _x_list = [x.transpose(0, 1)]
 
         if not valid:
             _x_list += self.forward(x_0, x, v, False, return_x=True)
         else:
             _x_list += self.forward_valid(x_0, v)
 
+        x_list = []  # numpy
         for _x in _x_list:
             _x = torch.clamp(_x, 0, 1)
             _x = _x.transpose(0, 1).detach().cpu().numpy()  # BxT
