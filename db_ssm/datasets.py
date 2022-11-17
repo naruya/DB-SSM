@@ -25,7 +25,11 @@ class MyDataset(Dataset):
         self.vid = np.array([vread(path) for path in vid_paths]).astype(np.uint8)
         self.viw = np.array([np.load(path) for path in viw_paths]).astype(np.float32)
 
-        print(mode, self.vid.shape, self.viw.shape)
+        # super heuristic hyper param (duplicate about 10 times)
+        ano = ((np.random.permutation(np.arange(len(self.vid))) % 50).astype(np.float32) - 25. ) / 25.
+        self.ano = np.broadcast_to(ano[:,None,None], list(self.vid.shape[:2]) + [1])
+
+        print(mode, self.vid.shape, self.viw.shape, self.ano.shape)
 
     def __len__(self):
         return len(self.vid)
@@ -33,8 +37,9 @@ class MyDataset(Dataset):
     def __getitem__(self, idx):
         x = self.vid[idx]
         v = self.viw[idx]
+        a = self.ano[idx]
         x = np.transpose(x, [0,3,1,2])
-        x_0, x, v = x[0], x[1:], v[1:]
+        x_0, x, v = x[0], x[1:], np.hstack([v[1:], a[1:]])
         return x_0, x, v
 
 
@@ -44,6 +49,7 @@ class MyValidDataset(MyDataset):
         self.T = T_val
         self.vid = dataset.vid
         self.viw = dataset.viw
+        self.ano = dataset.ano
 
 
 class MyLoader(DataLoader):
