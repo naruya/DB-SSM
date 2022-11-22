@@ -110,7 +110,6 @@ def main():
 
     t = 0
     ano_t = 0.
-    print(x_0.shape, v_0.shape, v_0)
     print("I'm Ready!")
 
     def connect(s):
@@ -132,10 +131,11 @@ def main():
 
         while True:
             with conn:
-                time.sleep(0.03)
+                # time.sleep(1)
                 last_data = np.zeros(20)
                 img_enc, view_enc = None, None
                 while True:
+                    t += 1
                     try:
                         data = conn.recv(1024)
                     except OSError as e:
@@ -152,7 +152,8 @@ def main():
 
                     # diff check!
                     diff = np.sum(np.abs(last_data[:len(decode_data)] - decode_data))
-                    if diff < 1e-5 and img_enc is not None and view_enc is not None:
+                    # if diff < 1e-5 and img_enc is not None and view_enc is not None:
+                    if 2 <= t <= 10 and img_enc is not None and view_enc is not None:
                         conn.sendall(view_enc + img_enc)
                         continue
 
@@ -161,7 +162,7 @@ def main():
                     quat = np.array(decode_data[3:7])
                     mode = int(decode_data[7])
                     dist = np.sum(np.power(xyz, 2)) ** 0.5
-                    print(mode, np.round(dist, 2), np.round(xyz, 2), np.round(quat, 2))
+                    # print(mode, np.round(dist, 2), np.round(xyz, 2), np.round(quat, 2))
 
                     # c2w = xyzquat2c2w(xyz, quat)
                     ### TODO
@@ -173,19 +174,18 @@ def main():
 
                     with torch.no_grad():
                         xyz = xyz / np.linalg.norm(xyz)
-                        if (t+1) % 10 == 0:
-                            ano_t = np.random.uniform(-1,1)
-                        v_t = np.append(xyz, ano_t).astype(np.float32)
+                        # if t % 10 == 0:
+                            # ano_t = np.random.uniform(-1,1)
+                        # v_t = np.append(xyz, ano_t).astype(np.float32)
+                        v_t = np.append(xyz, 0.).astype(np.float32)
                         x_t = model.step(v_t=v_t)
 
                         if use_sr:
                             f_t = get_flow(x_p, x_t)
                             xl_t = model_sr.step(x_p, xl_p, x_t, f_t)
-                            xl_t = cv2.resize(xl_t, [args.rsize, args.rsize])
-                            img = f_frame(xl_t)
+                            img = f_frame(cv2.resize(xl_t, [args.rsize, args.rsize]))
                         else:
-                            x_t = cv2.resize(x_t, [args.rsize, args.rsize])
-                            img = f_frame(x_t)
+                            img = f_frame(cv2.resize(x_t, [args.rsize, args.rsize]))
 
                     view = np.zeros([6])  # dummy. not used
                     view = ("{} " * 6)[:-1].format(*view).encode()
@@ -196,7 +196,6 @@ def main():
                     if use_sr:
                         x_p = x_t
                         xl_p = xl_t
-                    t += 1
 
 
 if __name__ == "__main__":
