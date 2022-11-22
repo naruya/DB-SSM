@@ -1,17 +1,18 @@
 import argparse
 import socket
+import cv2
 import torch
 import numpy as np
-import cv2
-from tqdm import tqdm
-import time
 import quaternion
 from scipy.spatial.transform import Rotation
-from db_ssm.model import SSM
-from skvideo.io import vread
-from copy import deepcopy
-import glob
 import os
+import glob
+import time
+from copy import deepcopy
+from skvideo.io import vread
+
+from db_ssm.model import SSM
+
 
 def get_args(args=None):
     parser = argparse.ArgumentParser()
@@ -59,6 +60,31 @@ def xyzquat2c2w(xyz, quat):
     return c2w
 
 
+
+# use_sr = False
+use_sr = True
+if use_sr:
+    import sys
+    sys.path.append('../db_ssm_sr')
+    from sr import SR
+
+    def get_flow(x_p, x_t):
+        frame1 = cv2.cvtColor(deepcopy(x_p), cv2.COLOR_BGR2GRAY)
+        frame2 = cv2.cvtColor(deepcopy(x_t), cv2.COLOR_BGR2GRAY)
+        flow = cv2.calcOpticalFlowFarneback(frame1, frame2, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        mask = cv2.bitwise_or(
+            cv2.threshold(frame1, 0, 255, cv2.THRESH_BINARY)[1], 
+            cv2.threshold(frame2, 0, 255, cv2.THRESH_BINARY)[1],
+        )[...,None].astype(np.float32) / 255.
+        flow = flow * mask
+
+        mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
+        map_x = - mag * np.cos(ang) / 32.
+        map_y = - mag * np.sin(ang) / 32.
+        flow = np.concatenate([map_x[...,None], map_y[...,None]], axis=2)
+        return flow
+
+
 def main():
     args = get_args()
 
@@ -66,18 +92,25 @@ def main():
     model.load(args.resume_epoch)
 
     data_dir = "../data/tonpy-v11/data"
-    vid_path = sorted(glob.glob(os.path.join(data_dir, "video", "*.gif")))[0]
-    viw_path = sorted(glob.glob(os.path.join(data_dir, "view", "*.npy")))[0]
+    vid_path = sorted(glob.glob(os.path.join(data_dir, "video", "*.gif")))[2]
+    viw_path = sorted(glob.glob(os.path.join(data_dir, "view", "*.npy")))[2]
     x = vread(vid_path).astype(np.uint8)
     v = np.load(viw_path).astype(np.float32)
     a = np.zeros([len(v),1]).astype(np.float32)
     v = np.hstack([v, a])
     x_0 = deepcopy(x[0])
     v_0 = deepcopy(v[0])
-    print(x_0.shape, v_0.shape)
     x_t = model.step(v_t=v_0, x_0=x_0)
 
-    flag_first = True
+    if use_sr:
+        x_p = deepcopy(x_t)
+        xl_p = deepcopy(x_t)
+        model_sr = SR()
+        model_sr.load(600)
+
+    t = 0
+    ano_t = 0.
+    print(x_0.shape, v_0.shape, v_0)
     print("I'm Ready!")
 
     def connect(s):
@@ -139,24 +172,31 @@ def main():
                     
 
                     with torch.no_grad():
-                        if flag_first:
-                            pass
-
                         xyz = xyz / np.linalg.norm(xyz)
-                        v_t = np.append(xyz, 0.).astype(np.float32)
-                        img = model.step(v_t=v_t)
-                        # img = np.zeros([args.rsize, args.rsize, 3]).astype(np.uint8)
-                        img = cv2.resize(img, [args.rsize, args.rsize])
-                        # c2w = torch.from_numpy(c2w).float()
-                        # img = r.render_persp(c2w.to(device), size, size,
-                                             # fx=focal*(dist/args.dist), fast=True)
-                    img = f_frame(img)
+                        if (t+1) % 10 == 0:
+                            ano_t = np.random.uniform(-1,1)
+                        v_t = np.append(xyz, ano_t).astype(np.float32)
+                        x_t = model.step(v_t=v_t)
+
+                        if use_sr:
+                            f_t = get_flow(x_p, x_t)
+                            xl_t = model_sr.step(x_p, xl_p, x_t, f_t)
+                            xl_t = cv2.resize(xl_t, [args.rsize, args.rsize])
+                            img = f_frame(xl_t)
+                        else:
+                            x_t = cv2.resize(x_t, [args.rsize, args.rsize])
+                            img = f_frame(x_t)
 
                     view = np.zeros([6])  # dummy. not used
                     view = ("{} " * 6)[:-1].format(*view).encode()
                     img_enc = cv2.imencode(".png", img)[1].tobytes()
                     view_enc = "{:04}    ".format(len(view)).encode() + view
                     conn.sendall(view_enc + img_enc)
+
+                    if use_sr:
+                        x_p = x_t
+                        xl_p = xl_t
+                    t += 1
 
 
 if __name__ == "__main__":
