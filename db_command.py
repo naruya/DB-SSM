@@ -61,8 +61,8 @@ def xyzquat2c2w(xyz, quat):
 
 
 
-# use_sr = False
-use_sr = True
+use_sr = False
+# use_sr = True
 if use_sr:
     import sys
     sys.path.append('../db_ssm_sr')
@@ -151,7 +151,7 @@ def main():
                         print("invalid data"); del conn; conn = connect(s); continue
 
                     # diff check!
-                    diff = np.sum(np.abs(last_data[:len(decode_data)] - decode_data))
+                    # diff = np.sum(np.abs(last_data[:len(decode_data)] - decode_data))
                     # if diff < 1e-5 and img_enc is not None and view_enc is not None:
                     if 2 <= t <= 10 and img_enc is not None and view_enc is not None:
                         conn.sendall(view_enc + img_enc)
@@ -174,10 +174,10 @@ def main():
 
                     with torch.no_grad():
                         xyz = xyz / np.linalg.norm(xyz)
-                        # if t % 10 == 0:
-                            # ano_t = np.random.uniform(-1,1)
-                        # v_t = np.append(xyz, ano_t).astype(np.float32)
-                        v_t = np.append(xyz, 0.).astype(np.float32)
+                        if t % 30 == 0:
+                            ano_t = np.random.uniform(-1,1)
+                        v_t = np.append(xyz, ano_t).astype(np.float32)
+                        # v_t = np.append(xyz, 0.).astype(np.float32)
                         x_t = model.step(v_t=v_t)
 
                         if use_sr:
