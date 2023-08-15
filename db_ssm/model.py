@@ -183,17 +183,19 @@ class SSM(nn.Module):
 
     def calc_s_over_loss(self, *args):
         """
-                        (t=0)          (t=1)          (t=2)        T=3
-            (s_0) ->    q[0]     ->    q[1]     ->    q[2]
+            (t=-1)      (t=0)          (t=1)         (t=2)        -> t
+             s_0  ->     q_0     ->     q_1     ->    q_2
                    \              \              \
                        p_{0|-1}  ->   p_{1|0}   ->   p_{2|1}
                                   \              \             \
-                                      p_{1|-1}  ->   p_{2|0}   (t_init= 1)
+                                      p_{1|-1}  ->   p_{2|0}     (t_init= 1)
                                                  \             \
-            |                                        p_{2|-1}  (t_init= 0)
+            |                                        p_{2|-1}    (t_init= 0)
             v                                                  \
-          depth                                                (t_init=-1)
-                        v[0]           v[1]           v[2]
+          depth                                                  (t_init=-1)
+                         v_0            v_1           v_2
+
+        For every p_{t|t_init}, calc the KL divergence with its corresponding q_t
         """
         loss = 0.
 
